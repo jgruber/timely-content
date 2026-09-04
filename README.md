@@ -177,3 +177,7 @@ DATA_DIR=../data PORT=9099 COOKIE_SECURE=false ADMIN_PASSWORD=devpassword123 npm
 # Terminal 2 -- Vite dev server on :5173, proxying /api to :9099
 cd web && npm install && npm run dev
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).
