@@ -1,0 +1,77 @@
+# ---- Dependencies ----------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+jspm_packages/
+
+# ---- Build output ----------------------------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+.vite/
+
+# ---- Runtime data ----------------------------------------------------------
+# The Docker volume: user credentials, session secret and all stored content.
+# Never commit this -- it holds password hashes and private uploads.
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Environment and secrets -----------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# ---- Logs ------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---- Caches and coverage ---------------------------------------------------
+.npm
+.eslintcache
+.stylelintcache
+.cache/
+.parcel-cache/
+coverage/
+*.lcov
+.nyc_output/
+
+# ---- Editors and tooling ---------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# ---- OS --------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---- Temporary -------------------------------------------------------------
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig

@@ -1,0 +1,53 @@
+services:
+  timely-content:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: timely-content:latest
+    container_name: timely-content
+    restart: unless-stopped
+
+    environment:
+      # Port the app listens on inside the container. A reverse proxy in front
+      # of this terminates TLS and forwards to it.
+      PORT: 9080
+      DATA_DIR: /data
+      # Session cookies are marked Secure by default, which assumes the proxy
+      # serves the site over HTTPS. Set to "false" only for plain-HTTP testing.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Number of proxy hops to trust for X-Forwarded-* headers.
+      TRUST_PROXY_HOPS: 1
+      # Used only on first start, when credentials.json does not yet exist.
+      # Leave unset to have a random password generated and printed to the log.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+    ports:
+      # host:container -- point the reverse proxy at this host port.
+      - "${HOST_PORT:-9080}:9080"
+
+    volumes:
+      # Both paths live on the host so an external backup tool can copy them.
+      #   credentials.json -- user accounts and password hashes
+      #   content/         -- uploaded and authored content plus its index
+      - ${DATA_PATH:-./data}:/data
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:9080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

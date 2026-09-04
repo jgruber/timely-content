@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- Same QR mark as the app header. SVG for modern browsers, .ico as the
+         fallback, and a PNG for iOS home-screen bookmarks. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#4f46e5" />
+
+    <!-- Replaced at runtime with the administrator's site name. -->
+    <title>Timely Content</title>
+    <script>
+      // Apply the stored theme before first paint to avoid a flash.
+      try {
+        var p = JSON.parse(localStorage.getItem('tc.prefs') || '{}');
+        var mode = p.mode || 'system';
+        var dark = mode === 'dark' || (mode === 'system' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.dataset.accent = p.accent || 'indigo';
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

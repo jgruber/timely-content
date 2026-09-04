@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --surface: #f4f6f8;
+  --panel: #ffffff;
+  --raised: #fbfcfd;
+  --line: #e2e6eb;
+  --ink: #14171c;
+  --muted: #5f6875;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+}
+
+.dark {
+  color-scheme: dark;
+  --surface: #0d0f14;
+  --panel: #161920;
+  --raised: #1d212a;
+  --line: #272c36;
+  --ink: #e7eaef;
+  --muted: #98a1b0;
+  --danger: #f87171;
+  --danger-soft: #2a1416;
+}
+
+/* Per-user colour themes. Each defines the accent ramp in both schemes. */
+[data-accent="indigo"]  { --accent: #4f46e5; --accent-hover: #4338ca; --accent-ink: #fff; --accent-soft: #eef2ff; }
+[data-accent="teal"]    { --accent: #0d9488; --accent-hover: #0f766e; --accent-ink: #fff; --accent-soft: #effcf9; }
+[data-accent="violet"]  { --accent: #7c3aed; --accent-hover: #6d28d9; --accent-ink: #fff; --accent-soft: #f5f0ff; }
+[data-accent="rose"]    { --accent: #e11d48; --accent-hover: #be123c; --accent-ink: #fff; --accent-soft: #fff1f4; }
+[data-accent="amber"]   { --accent: #b45309; --accent-hover: #92400e; --accent-ink: #fff; --accent-soft: #fff8ed; }
+[data-accent="emerald"] { --accent: #059669; --accent-hover: #047857; --accent-ink: #fff; --accent-soft: #ecfdf5; }
+[data-accent="sky"]     { --accent: #0284c7; --accent-hover: #0369a1; --accent-ink: #fff; --accent-soft: #f0f9ff; }
+
+.dark[data-accent="indigo"]  { --accent: #7c83f5; --accent-hover: #949aff; --accent-ink: #0b0d16; --accent-soft: #1e1f45; }
+.dark[data-accent="teal"]    { --accent: #2dd4bf; --accent-hover: #5eead4; --accent-ink: #06201d; --accent-soft: #10322f; }
+.dark[data-accent="violet"]  { --accent: #a78bfa; --accent-hover: #c4b5fd; --accent-ink: #150a2b; --accent-soft: #2a1f4d; }
+.dark[data-accent="rose"]    { --accent: #fb7185; --accent-hover: #fda4af; --accent-ink: #2b0710; --accent-soft: #3d1520; }
+.dark[data-accent="amber"]   { --accent: #fbbf24; --accent-hover: #fcd34d; --accent-ink: #241603; --accent-soft: #3a2a08; }
+.dark[data-accent="emerald"] { --accent: #34d399; --accent-hover: #6ee7b7; --accent-ink: #04231a; --accent-soft: #103227; }
+.dark[data-accent="sky"]     { --accent: #38bdf8; --accent-hover: #7dd3fc; --accent-ink: #04202e; --accent-soft: #0d2c40; }
+
+html, body, #root { height: 100%; }
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Keep focus rings visible for keyboard users without boxing every click. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* ---- Rendered markdown ------------------------------------------------- */
+
+.md-body {
+  color: var(--ink);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.md-body > *:first-child { margin-top: 0; }
+.md-body > *:last-child { margin-bottom: 0; }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 1.8em 0 0.6em;
+}
+.md-body h1 { font-size: 1.7rem; letter-spacing: -0.02em; }
+.md-body h2 { font-size: 1.35rem; letter-spacing: -0.01em; padding-bottom: 0.3em; border-bottom: 1px solid var(--line); }
+.md-body h3 { font-size: 1.13rem; }
+.md-body h4 { font-size: 1rem; }
+.md-body p { margin: 0.9em 0; }
+.md-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.md-body ul, .md-body ol { margin: 0.9em 0; padding-left: 1.6em; }
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+.md-body li { margin: 0.35em 0; }
+.md-body li::marker { color: var(--muted); }
+.md-body blockquote {
+  margin: 1.2em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+.md-body code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+}
+.md-body pre {
+  margin: 1.2em 0;
+  padding: 1em;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.md-body pre code { background: none; border: 0; padding: 0; font-size: 0.85em; }
+.md-body table { width: 100%; margin: 1.2em 0; border-collapse: collapse; display: block; overflow-x: auto; }
+.md-body th, .md-body td { border: 1px solid var(--line); padding: 0.5em 0.75em; text-align: left; }
+.md-body th { background: var(--raised); font-weight: 600; }
+.md-body hr { margin: 2em 0; border: 0; border-top: 1px solid var(--line); }
+.md-body img { max-width: 100%; height: auto; border-radius: 8px; }
+.md-body input[type="checkbox"] { margin-right: 0.5em; }
+
+/* ---- Toast UI editor: bind its chrome to our tokens --------------------- */
+
+.tc-editor .toastui-editor-defaultUI {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.tc-editor .toastui-editor-defaultUI-toolbar {
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+}
+.tc-editor .toastui-editor-mode-switch {
+  background: var(--raised);
+  border-top: 1px solid var(--line);
+}
+.tc-editor .toastui-editor-md-splitter { background: var(--line); }
+.tc-editor .toastui-editor-toolbar-divider { background: var(--line); }
+.tc-editor .toastui-editor-defaultUI-toolbar button { border-radius: 6px; }
+.tc-editor .ProseMirror { caret-color: var(--accent); }
+
+/* Text-labelled toolbar buttons for headings. */
+.tc-editor .tc-tool-button {
+  min-width: 40px;
+  height: 32px;
+  margin: 0 1px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+.tc-editor .tc-tool-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.tc-editor .tc-tool-button:active { transform: translateY(1px); }
+
+/* Task-list markers rendered without form controls. */
+.md-body li:has(> .md-check) { list-style: none; margin-left: -1.35em; }
+.md-body .md-check {
+  display: inline-block;
+  width: 1.02em;
+  height: 1.02em;
+  margin-right: 0.5em;
+  vertical-align: -0.15em;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: var(--raised);
+}
+.md-body .md-check.is-checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  /* Tick drawn with a background image so no extra element is needed. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 13 4 4L19 7'/%3E%3C/svg%3E");
+  background-size: 78%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
