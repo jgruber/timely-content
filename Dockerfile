@@ -23,6 +23,16 @@ FROM node:22-alpine AS runtime
 # tini reaps zombies and forwards signals, so the container stops promptly.
 RUN apk add --no-cache tini su-exec
 
+# OCI labels: these link the published package to its repository and
+# licence on GHCR, and populate the package page's description.
+LABEL org.opencontainers.image.title="Timely Content" \
+      org.opencontainers.image.description="Share files and markdown notes by QR code, with per-link view limits and optional self-destruct." \
+      org.opencontainers.image.source="https://github.com/jgruber/timely-content" \
+      org.opencontainers.image.url="https://github.com/jgruber/timely-content" \
+      org.opencontainers.image.documentation="https://github.com/jgruber/timely-content#readme" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="jgruber"
+
 ENV NODE_ENV=production \
     PORT=9080 \
     DATA_DIR=/data \
