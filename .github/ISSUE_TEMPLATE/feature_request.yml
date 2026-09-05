@@ -1,0 +1,85 @@
+name: Feature request
+description: Suggest a change or something new
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describing the problem you hit is more useful than describing a
+        solution — it usually opens up options nobody had considered.
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which part of the flow does this affect?
+      options:
+        - Posting — creating a note or uploading a file
+        - Retrieval — opening a share link or scanning a QR code
+        - Both
+        - Neither / something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Upload / file handling
+        - Markdown editor
+        - QR code or share link
+        - Access limits or self-destruct
+        - Accounts, sign-in, or password reset
+        - Email delivery (confirmation / reset)
+        - Administration screens
+        - Appearance / themes
+        - Install as an app (PWA)
+        - Deployment, Docker, or configuration
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: What were you doing when you wanted this, and what got in the way?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What are you doing instead today?
+      description: Workarounds you have found, or why the current behaviour does not fit.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who is this for?
+      options:
+        - People posting content
+        - People receiving a share link
+        - Administrators running the instance
+        - Everyone
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this has not been suggested
+          required: true

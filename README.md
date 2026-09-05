@@ -69,6 +69,7 @@ The first start after upgrading migrates `credentials.json` automatically:
 | First run | Setup screen creates the first administrator; no default password |
 | Install | Installable as a PWA from the browser, or "Install app" in the profile menu |
 | Oversight | Administrators see and can remove content posted by any account |
+| Support | **About** in the profile menu shows the version and links to the issue tracker |
 | Authoring | WYSIWYG markdown editor, or upload any file |
 | Sharing | Each item gets a QR code and a link at `/c/<token>` |
 | Access limit | A fixed number of opens, or unlimited |
@@ -106,6 +107,22 @@ Two deliberate properties:
 This is the only place that reads across accounts. Every owner-facing route
 stays scoped to the signed-in account, and a non-administrator gets `403` from
 all of it.
+
+## Reporting a problem
+
+**Profile menu -> About** shows the running version and gathers the details a
+bug report needs — version, browser, whether it is running installed or in a
+tab, and the server's Node version. *Report a bug* opens the issue form with
+the version and browser already filled in.
+
+The version is only served to signed-in users: telling anonymous visitors and
+share-link recipients exactly which build is running only helps someone match
+it against a known vulnerability.
+
+Issue templates live in `.github/ISSUE_TEMPLATE/`. They ask which part of the
+flow is affected — posting or retrieval — and which area, so an issue can be
+labelled on arrival. Please never paste a share link or private content into an
+issue: a share link grants access to whoever opens it.
 
 ## Configuration
 

@@ -1,0 +1,18 @@
+# A blank issue skips every triage field, so send people to a template.
+blank_issues_enabled: false
+contact_links:
+  - name: Deployment and configuration help
+    url: https://github.com/jgruber/timely-content#configuration
+    about: >
+      Required variables, environment overrides, reverse proxy examples and
+      backup layout are documented in the README.
+  - name: Upgrading from an older version
+    url: https://github.com/jgruber/timely-content#upgrading-from-a-username-based-install
+    about: >
+      Read this before upgrading past 1.0.x — sign-in moved from usernames to
+      email addresses.
+  - name: Report a security problem privately
+    url: https://github.com/jgruber/timely-content/security/advisories/new
+    about: >
+      Please do not open a public issue for a vulnerability. Use a private
+      security advisory instead.

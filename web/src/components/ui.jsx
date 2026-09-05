@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export function cx(...parts) {
   return parts.filter(Boolean).join(' ');
@@ -167,7 +168,15 @@ export function Badge({ tone = 'neutral', children }) {
   );
 }
 
-/** Accessible modal: focus trapped on open, Escape closes, click-outside closes. */
+/**
+ * Accessible modal: focus moved on open, Escape closes, click-outside closes.
+ *
+ * Rendered through a portal into <body>. `position: fixed` is resolved against
+ * the nearest ancestor with a transform, filter or backdrop-filter rather than
+ * the viewport, and the app header uses backdrop-blur -- a modal opened from
+ * the profile menu would otherwise be anchored to the header and hang off the
+ * top of the screen.
+ */
 export function Modal({ open, onClose, title, children, footer, wide }) {
   const panelRef = useRef(null);
 
@@ -190,7 +199,7 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
 
   if (!open) return null;
 
-  return (
+  return createPortal((
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -221,7 +230,7 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
         )}
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 const PATHS = {
@@ -249,6 +258,8 @@ const PATHS = {
   shield: 'M12 3l8 3v6c0 4.4-3.2 8.2-8 9-4.8-.8-8-4.6-8-9V6l8-3Z',
   menu: 'M4 7h16M4 12h16M4 17h16',
   install: 'M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z|M12 11v5|M12 7.5h.01',
+  bug: 'M8 6a4 4 0 1 1 8 0m-9 3h10v5a5 5 0 0 1-10 0V9Zm-4 1h4m-4 5h4m12-5h-4m4 5h-4M6.5 5 8 6.5M17.5 5 16 6.5',
 };
 
 export function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.8 }) {

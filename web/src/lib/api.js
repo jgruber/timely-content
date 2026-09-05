@@ -39,6 +39,7 @@ export class ApiError extends Error {
 export const api = {
   site: () => request('/api/site'),
   setup: (payload) => request('/api/site/setup', { method: 'POST', body: payload }),
+  about: () => request('/api/site/about'),
 
   me: () => request('/api/auth/me'),
   login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { canInstall, onInstallAvailabilityChange, promptInstall } from '../lib/pwa.js';
+import AboutModal from './AboutModal.jsx';
 import { Icon, cx } from './ui.jsx';
 
 function navClass({ isActive }) {
@@ -24,6 +25,7 @@ function ProfileMenu() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [installable, setInstallable] = useState(canInstall);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const wrapRef = useRef(null);
 
   // The browser decides when installing is possible; mirror that state so the
@@ -117,6 +119,14 @@ function ProfileMenu() {
           </div>
 
           <div className="border-t border-line py-1">
+            <button
+              role="menuitem"
+              className={itemClass}
+              onClick={() => { setOpen(false); setAboutOpen(true); }}
+            >
+              <Icon name="info" className="h-4 w-4 text-muted" />
+              About
+            </button>
             <button role="menuitem" onClick={signOut} className={itemClass}>
               <Icon name="logout" className="h-4 w-4 text-muted" />
               Sign out
@@ -124,6 +134,8 @@ function ProfileMenu() {
           </div>
         </div>
       )}
+
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }

@@ -1,8 +1,16 @@
 {
   "name": "timely-content-server",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jgruber/timely-content.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jgruber/timely-content/issues"
+  },
+  "homepage": "https://github.com/jgruber/timely-content#readme",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

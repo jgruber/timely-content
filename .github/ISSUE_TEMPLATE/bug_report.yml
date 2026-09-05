@@ -1,0 +1,161 @@
+name: Bug report
+description: Something is broken or behaves differently from what you expected
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The fields below are what we need to
+        reproduce a problem without a round of follow-up questions.
+
+        **Please do not paste share links, QR codes, or the contents of
+        anything private.** A share link grants access to whoever opens it.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Profile menu → **About**. The Copy button there gathers this and the browser details."
+      placeholder: "1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which part of the flow?
+      description: The single most useful thing for routing this to the right place.
+      options:
+        - Posting — creating a note or uploading a file
+        - Retrieval — opening a share link or scanning a QR code
+        - Both
+        - Neither / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Tick everything that looks relevant.
+      multiple: true
+      options:
+        - Upload / file handling
+        - Markdown editor
+        - QR code or share link
+        - Access limits or self-destruct
+        - Accounts, sign-in, or password reset
+        - Email delivery (confirmation / reset)
+        - Administration screens
+        - Appearance / themes
+        - Install as an app (PWA)
+        - Deployment, Docker, or configuration
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you saw, including any message shown on screen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Number them, starting from a signed-out browser where you can.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: content_kind
+    attributes:
+      label: What kind of content was involved?
+      options:
+        - A markdown note written in the editor
+        - An uploaded file
+        - An uploaded markdown (.md) file
+        - Not related to a specific item
+    validations:
+      required: true
+
+  - type: dropdown
+    id: access_settings
+    attributes:
+      label: How was access configured?
+      description: Only relevant if a specific item misbehaved.
+      options:
+        - Limited number of uses
+        - Limited, and set to delete when the limit is reached
+        - Unlimited
+        - Not applicable / do not remember
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      description: The About dialog includes this.
+      placeholder: "Chrome 141 on Android 15 / Safari on iPhone / Firefox on Windows"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_mode
+    attributes:
+      label: How were you using it?
+      options:
+        - A normal browser tab
+        - Installed as an app (added to home screen / installed from the browser)
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: server_logs
+    attributes:
+      label: Server log output
+      description: >
+        If you run the instance: `docker compose logs --tail 100 timely-content`.
+        Redact anything sensitive. Lines starting with `[config]`, `[migrate]`,
+        `[admin]` or `[error]` are the useful ones.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: deployment
+    attributes:
+      label: Deployment details
+      description: >
+        Only if this looks like a configuration or deployment problem. Reverse
+        proxy in use, whether `PUBLIC_URL` is set, whether email is enabled.
+        **Never paste passwords, SMTP credentials, or `credentials.json`.**
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this has not been reported
+          required: true
+        - label: I have not included any share link, QR code, or private content
+          required: true

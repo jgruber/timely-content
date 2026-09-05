@@ -5,7 +5,8 @@ import {
   usersStore, publicUser, newUserRecord, countUsers, validateEmail, normaliseEmail,
 } from '../lib/users.js';
 import { hashPassword, validatePassword } from '../lib/passwords.js';
-import { setSessionCookie } from '../lib/session.js';
+import { setSessionCookie, requireAuth } from '../lib/session.js';
+import { VERSION, REPOSITORY_URL, ISSUES_URL, STARTED_AT } from '../lib/version.js';
 
 const router = asyncRouter();
 
@@ -24,6 +25,25 @@ router.get('/', async (req, res) => {
     appearance: { mode: settings.defaultMode, accent: settings.defaultAccent },
     setupRequired: (await countUsers()) === 0,
     passwordResetEnabled: !!settings.passwordResetEnabled,
+  });
+});
+
+/**
+ * Build identity for the About screen.
+ *
+ * Behind auth on purpose: telling anonymous visitors and share-link recipients
+ * exactly which build is running only helps someone match it against a known
+ * vulnerability. Signed-in users are the ones who file bug reports.
+ */
+router.get('/about', requireAuth, async (req, res) => {
+  const settings = await getSettings();
+  res.json({
+    siteName: settings.siteName,
+    version: VERSION,
+    repositoryUrl: REPOSITORY_URL,
+    issuesUrl: ISSUES_URL,
+    startedAt: STARTED_AT,
+    nodeVersion: process.version,
   });
 });
 
