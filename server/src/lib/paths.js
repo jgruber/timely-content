@@ -8,6 +8,7 @@ export const CONTENT_DIR = path.join(DATA_DIR, 'content');
 export const BLOB_DIR = path.join(CONTENT_DIR, 'blobs');
 export const INDEX_FILE = path.join(CONTENT_DIR, 'index.json');
 export const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
+export const EMAIL_TOKENS_FILE = path.join(DATA_DIR, 'email-tokens.json');
 export const TMP_DIR = path.join(CONTENT_DIR, '.tmp');
 
 export const PORT = Number(process.env.PORT || 9080);

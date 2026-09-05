@@ -7,13 +7,14 @@ import { Button, Card, Input, Field, Alert, Icon, cx } from '../components/ui.js
 import { formatDate } from '../lib/format.js';
 
 const TABS = [
+  { id: 'account', label: 'Account', icon: 'users' },
   { id: 'appearance', label: 'Appearance', icon: 'eye' },
   { id: 'password', label: 'Password', icon: 'key' },
 ];
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('appearance');
+  const [tab, setTab] = useState('account');
 
   return (
     <div className="space-y-5">
@@ -21,11 +22,11 @@ export default function SettingsPage() {
 
       <Card className="flex flex-wrap items-center gap-3 p-4">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-lg font-semibold text-accent-ink">
-          {user.username.charAt(0).toUpperCase()}
+          {(user.displayName || user.email).charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
-            {user.username}
+            {user.displayName}
             {user.isAdmin && (
               <span className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
                 <Icon name="shield" className="h-3 w-3" />
@@ -33,6 +34,7 @@ export default function SettingsPage() {
               </span>
             )}
           </p>
+          <p className="truncate text-sm text-muted">{user.email}</p>
           <p className="text-sm text-muted">Member since {formatDate(user.createdAt)}</p>
         </div>
         {user.isAdmin && (
@@ -63,7 +65,123 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'appearance' ? <AppearanceTab /> : <PasswordTab />}
+      {tab === 'account' && <AccountTab />}
+      {tab === 'appearance' && <AppearanceTab />}
+      {tab === 'password' && <PasswordTab />}
+    </div>
+  );
+}
+
+function AccountTab() {
+  const { user, setUser } = useAuth();
+  const [displayName, setDisplayName] = useState(user.displayName || '');
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameDone, setNameDone] = useState(false);
+  const [nameError, setNameError] = useState('');
+
+  const [email, setEmail] = useState(user.email || '');
+  const [password, setPassword] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [emailNotice, setEmailNotice] = useState('');
+
+  const saveName = async (e) => {
+    e.preventDefault();
+    setNameError(''); setNameDone(false); setNameBusy(true);
+    try {
+      const res = await api.saveProfile(displayName.trim());
+      setUser((u) => ({ ...u, displayName: res.user.displayName }));
+      setNameDone(true);
+    } catch (err) {
+      setNameError(err.message);
+    } finally {
+      setNameBusy(false);
+    }
+  };
+
+  const saveEmail = async (e) => {
+    e.preventDefault();
+    setEmailError(''); setEmailNotice(''); setEmailBusy(true);
+    try {
+      const res = await api.changeEmail(password, email.trim());
+      setPassword('');
+      if (res.unchanged) {
+        setEmailNotice('That is already your address.');
+      } else if (res.verificationSent) {
+        // The server signs the session out until the new address is confirmed.
+        setEmailNotice('Check your new inbox for a confirmation link. '
+          + 'You have been signed out until the address is confirmed.');
+        setTimeout(() => { window.location.href = '/login'; }, 4000);
+      } else {
+        setUser((u) => ({ ...u, email: res.user.email }));
+        setEmailNotice('Address updated.');
+      }
+    } catch (err) {
+      setEmailError(err.message);
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <h2 className="font-medium text-ink">Display name</h2>
+        <p className="mb-4 mt-0.5 text-sm text-muted">Cosmetic only. It is not used to sign in.</p>
+        <form onSubmit={saveName} className="space-y-4">
+          <Field label="Display name" htmlFor="display-name">
+            <Input
+              id="display-name"
+              type="text"
+              maxLength={60}
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </Field>
+          <Alert>{nameError}</Alert>
+          {nameDone && <Alert tone="accent">Display name updated.</Alert>}
+          <Button type="submit" busy={nameBusy}>Save name</Button>
+        </form>
+      </Card>
+
+      <Card className="p-4">
+        <h2 className="font-medium text-ink">Email address</h2>
+        <p className="mb-4 mt-0.5 text-sm text-muted">
+          This is what you sign in with, and where password resets are sent. Changing it
+          needs your password, and the new address has to be confirmed before you can
+          sign in again.
+        </p>
+        <form onSubmit={saveEmail} className="space-y-4">
+          <Field label="Email address" htmlFor="account-email">
+            <Input
+              id="account-email"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          <Field label="Confirm with your password" htmlFor="account-email-password">
+            <Input
+              id="account-email-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+          <Alert>{emailError}</Alert>
+          {emailNotice && <Alert tone="accent">{emailNotice}</Alert>}
+          <Button type="submit" busy={emailBusy}>Change address</Button>
+        </form>
+      </Card>
     </div>
   );
 }

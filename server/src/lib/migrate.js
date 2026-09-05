@@ -1,0 +1,83 @@
+import crypto from 'node:crypto';
+import { usersStore, normaliseEmail, EMAIL_RE, defaultDisplayName } from './users.js';
+import { contentStore } from './content.js';
+
+/**
+ * One-time upgrade from the username-based schema to the email-based one.
+ *
+ * Old records were keyed by `username`, which was both the login identity and
+ * the owner of every piece of content. Accounts now sign in with an email
+ * address and own content through an immutable `id`.
+ *
+ * The migration is careful in two ways:
+ *
+ *   - Existing accounts are marked verified. Requiring verification
+ *     retroactively would lock people out of a working instance.
+ *   - Where the old username already looks like an email address it becomes
+ *     the login address, which is exactly the shape an operator gets by
+ *     renaming their account to their email before upgrading. Anything else
+ *     is left without an address for an administrator to fill in, and is
+ *     reported in the log rather than guessed at.
+ */
+export async function migrateToEmailIdentity() {
+  const changes = { users: 0, content: 0, needEmail: [] };
+
+  const idByUsername = await usersStore.write((data) => {
+    const map = new Map();
+    if (!Array.isArray(data.users)) return map;
+
+    for (const user of data.users) {
+      const legacyName = user.username;
+      if (user.id && user.email !== undefined && !legacyName) continue;
+
+      if (!user.id) {
+        user.id = crypto.randomBytes(12).toString('hex');
+        changes.users += 1;
+      }
+
+      if (legacyName) {
+        map.set(String(legacyName).toLowerCase(), user.id);
+
+        if (!user.email) {
+          user.email = EMAIL_RE.test(legacyName) ? normaliseEmail(legacyName) : '';
+        }
+        if (!user.displayName) {
+          user.displayName = EMAIL_RE.test(legacyName)
+            ? defaultDisplayName(user.email)
+            : legacyName;
+        }
+        delete user.username;
+      }
+
+      if (user.emailVerified === undefined) user.emailVerified = true;
+      if (!user.displayName) user.displayName = defaultDisplayName(user.email);
+      if (!user.email) changes.needEmail.push(user.displayName || user.id);
+    }
+
+    data.version = 2;
+    return map;
+  });
+
+  if (idByUsername.size > 0) {
+    await contentStore.write((data) => {
+      for (const item of data.items) {
+        const mapped = idByUsername.get(String(item.owner).toLowerCase());
+        if (mapped && item.owner !== mapped) {
+          item.owner = mapped;
+          changes.content += 1;
+        }
+      }
+    });
+  }
+
+  if (changes.users || changes.content) {
+    console.log(`[migrate] moved ${changes.users} account(s) and `
+      + `${changes.content} content item(s) to the email-based schema`);
+  }
+  for (const who of changes.needEmail) {
+    console.warn(`[migrate] account "${who}" has no email address and cannot sign in. `
+      + 'An administrator must set one from the Users screen.');
+  }
+
+  return changes;
+}

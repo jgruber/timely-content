@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { SECRET_FILE } from './paths.js';
-import { usersStore, findUser, publicUser } from './users.js';
+import { usersStore, findById, publicUser } from './users.js';
 import { getSettings } from './settings.js';
 
 export const COOKIE_NAME = 'tc_session';
@@ -34,7 +34,9 @@ function sign(payloadB64) {
 
 export function issueToken(user, sessionHours) {
   const payload = {
-    u: user.username,
+    // The immutable account id, not the address -- changing an email must not
+    // sign anyone out, and must not let an old cookie follow a reused address.
+    u: user.id,
     v: user.tokenVersion || 1,
     exp: Date.now() + sessionHours * 3600 * 1000,
   };
@@ -80,9 +82,11 @@ export async function attachUser(req, res, next) {
     const payload = verifyToken(req.cookies?.[COOKIE_NAME]);
     if (payload) {
       const user = await usersStore.read((data) => {
-        const found = findUser(data, payload.u);
+        const found = findById(data, payload.u);
         // A password change bumps tokenVersion, invalidating older sessions.
         if (!found || (found.tokenVersion || 1) !== payload.v) return null;
+        // An account whose address is no longer verified loses its session.
+        if (!found.emailVerified) return null;
         return structuredClone(found);
       });
       if (user) req.user = user;

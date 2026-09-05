@@ -60,7 +60,7 @@ async function withShareUrl(req, item) {
 
 router.get('/', async (req, res) => {
   const items = await contentStore.read((data) =>
-    data.items.filter((i) => i.owner === req.user.username && !i.pendingDelete).map((i) => structuredClone(i)));
+    data.items.filter((i) => i.owner === req.user.id && !i.pendingDelete).map((i) => structuredClone(i)));
   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const settings = await getSettings();
   res.json({
@@ -80,7 +80,7 @@ router.post('/', async (req, res) => {
   if (limit.error) return res.status(400).json({ error: limit.error });
 
   const item = newItem({
-    owner: req.user.username,
+    owner: req.user.id,
     title: cleanTitle(title, 'Untitled note'),
     kind: KIND_MARKDOWN,
     filename: null,
@@ -110,7 +110,7 @@ router.post('/upload', receiveUpload, async (req, res) => {
 
   const markdown = isMarkdownUpload(req.file);
   const item = newItem({
-    owner: req.user.username,
+    owner: req.user.id,
     title: cleanTitle(req.body.title, req.file.originalname || 'Untitled upload'),
     kind: markdown ? KIND_MARKDOWN : KIND_FILE,
     filename: req.file.originalname || 'download',
@@ -128,7 +128,7 @@ router.post('/upload', receiveUpload, async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   const item = await contentStore.read((data) => {
-    const found = ownedBy(data, req.params.id, req.user.username);
+    const found = ownedBy(data, req.params.id, req.user.id);
     return found ? structuredClone(found) : null;
   });
   if (!item) return res.status(404).json({ error: 'Content not found.' });
@@ -150,7 +150,7 @@ router.put('/:id', async (req, res) => {
   }
 
   const existing = await contentStore.read((data) => {
-    const found = ownedBy(data, req.params.id, req.user.username);
+    const found = ownedBy(data, req.params.id, req.user.id);
     return found ? structuredClone(found) : null;
   });
   if (!existing) return res.status(404).json({ error: 'Content not found.' });
@@ -168,7 +168,7 @@ router.put('/:id', async (req, res) => {
   }
 
   const updated = await contentStore.write((data) => {
-    const item = ownedBy(data, req.params.id, req.user.username);
+    const item = ownedBy(data, req.params.id, req.user.id);
     if (!item) return null;
     if (title !== undefined) item.title = cleanTitle(title, item.title);
     if (body !== undefined) item.size = Buffer.byteLength(String(body), 'utf8');
@@ -193,7 +193,7 @@ router.post('/:id/rotate', async (req, res) => {
   }
 
   const updated = await contentStore.write((data) => {
-    const item = ownedBy(data, req.params.id, req.user.username);
+    const item = ownedBy(data, req.params.id, req.user.id);
     if (!item) return null;
     item.token = randomToken();
     item.accessCount = 0;
@@ -210,7 +210,7 @@ router.post('/:id/rotate', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const item = await contentStore.read((data) => {
-    const found = ownedBy(data, req.params.id, req.user.username);
+    const found = ownedBy(data, req.params.id, req.user.id);
     return found ? structuredClone(found) : null;
   });
   if (!item) return res.status(404).json({ error: 'Content not found.' });
@@ -222,7 +222,7 @@ router.delete('/:id', async (req, res) => {
 router.get('/:id/qr.png', async (req, res, next) => {
   try {
     const item = await contentStore.read((data) => {
-      const found = ownedBy(data, req.params.id, req.user.username);
+      const found = ownedBy(data, req.params.id, req.user.id);
       return found ? structuredClone(found) : null;
     });
     if (!item) return res.status(404).json({ error: 'Content not found.' });
@@ -248,7 +248,7 @@ router.get('/:id/qr.png', async (req, res, next) => {
 router.get('/:id/download', async (req, res, next) => {
   try {
     const item = await contentStore.read((data) => {
-      const found = ownedBy(data, req.params.id, req.user.username);
+      const found = ownedBy(data, req.params.id, req.user.id);
       return found ? structuredClone(found) : null;
     });
     if (!item) return res.status(404).json({ error: 'Content not found.' });

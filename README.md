@@ -14,10 +14,14 @@ cp .env.example .env      # set HOST_PORT and DATA_PATH
 docker compose up -d --build
 ```
 
+The service will not start until it knows its public address and how to send
+mail; the log spells out exactly what to set. See **Configuration** below, or
+set `PASSWORD_RESET_ENABLED=false` to run without email.
+
 Open `http://<host>:9080/`. On a fresh volume every route redirects to a
 first-run setup screen where you create the first account — it becomes the
-administrator. The screen disappears once that account exists, and the setup
-endpoint refuses to run again.
+administrator, and is the only account that does not need its address
+confirmed. The screen disappears once that account exists.
 
 Setup also asks for the **Public URL** (optional): the address your users
 actually reach, which is what QR codes encode. You can set it later under
@@ -25,10 +29,38 @@ actually reach, which is what QR codes encode. You can set it later under
 
 ### Unattended setup
 
-For automated deployments, set **both** `ADMIN_USERNAME` and `ADMIN_PASSWORD`
-in `.env` and the first administrator is seeded on first start instead, so the
-setup screen never appears. Neither variable does anything once a user exists,
-and no password is ever generated for you.
+For automated deployments, set **both** `ADMIN_EMAIL` and `ADMIN_PASSWORD` in
+`.env` and the first administrator is seeded on first start instead, so the
+setup screen never appears. Neither variable does anything once an account
+exists, and no password is ever generated for you.
+
+## Accounts
+
+People sign in with their **email address**. Every account also carries an
+immutable internal id, and content ownership hangs off that rather than the
+address — so changing an address never orphans a library.
+
+Every account except the first administrator has to confirm its address before
+it can sign in. Creating a user sends a confirmation link; until it is followed
+the account exists but cannot be used. An administrator can resend the link, or
+mark an address confirmed by hand when mail cannot reach someone.
+
+Forgotten passwords are recovered from the sign-in screen. The emailed link
+works once, expires (30 minutes by default), signs the account out of every
+other device when spent, and is revoked by any later password change. Requests
+answer identically whether or not the address is registered, so the endpoint
+cannot be used to discover who has an account.
+
+### Upgrading from a username-based install
+
+The first start after upgrading migrates `credentials.json` automatically:
+
+- Existing accounts get an internal id, and their content is re-pointed at it.
+- They are marked **confirmed**, so nobody is locked out of a working instance.
+- A username that is already an email address becomes the login address. If you
+  intend to keep an account, rename it to the owner's email before upgrading.
+- Anything else is left without an address and named in the log; an
+  administrator sets one from the Users screen before that person can sign in.
 
 ## How it works
 
@@ -61,14 +93,53 @@ have actually left.
 
 Environment variables (see `docker-compose.yml`):
 
+**Every setting in `settings.json` has an environment override, and the
+environment always wins.** A value supplied by the environment is shown
+read-only in the admin screen rather than offering an edit the next restart
+would silently discard.
+
+### Required
+
+The service refuses to start without these, and prints what to set and why:
+
+| Variable | Why it is required |
+| --- | --- |
+| `PUBLIC_URL` | Reset links must never be built from the request `Host` header, which an attacker can forge to point a link at their own server |
+| `SMTP_HOST` | There is no way to send a confirmation or reset email without a relay |
+| `SMTP_FROM` | Mail servers reject a message with no sender |
+
+Set `PASSWORD_RESET_ENABLED=false` and none of them are required: the app runs
+with no mail server, the forgot-password link is hidden, and new accounts are
+usable without confirming an address.
+
+### Everything else
+
+| Variable | settings.json | Default |
+| --- | --- | --- |
+| `SITE_NAME` | `siteName` | `Timely Content` |
+| `DEFAULT_MODE` | `defaultMode` | `system` |
+| `DEFAULT_ACCENT` | `defaultAccent` | `indigo` |
+| `ENFORCE_HOST` | `enforceHost` | `false` |
+| `MAX_UPLOAD_MB` | `maxUploadMb` | `25` |
+| `SESSION_HOURS` | `sessionHours` | `12` |
+| `PASSWORD_RESET_ENABLED` | `passwordResetEnabled` | `true` |
+| `RESET_TOKEN_MINUTES` | `resetTokenMinutes` | `30` |
+| `SMTP_PORT` | `smtp.port` | `587` |
+| `SMTP_SECURE` | `smtp.secure` | `false` |
+| `SMTP_USER` | `smtp.user` | *(empty)* |
+| `SMTP_PASS` | `smtp.pass` | *(empty)* |
+| `SMTP_FROM_NAME` | `smtp.fromName` | site name |
+
+Environment-only, with no `settings.json` equivalent:
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `9080` | Port inside the container |
 | `DATA_DIR` | `/data` | Where credentials and content live |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-HTTP testing |
 | `TRUST_PROXY_HOPS` | `1` | Proxy hops to trust for `X-Forwarded-*` |
-| `ADMIN_USERNAME` | *(unset)* | Optional unattended seeding; needs `ADMIN_PASSWORD` too |
-| `ADMIN_PASSWORD` | *(unset)* | Optional unattended seeding; needs `ADMIN_USERNAME` too |
+| `ADMIN_EMAIL` | *(unset)* | Optional unattended seeding; needs `ADMIN_PASSWORD` too |
+| `ADMIN_PASSWORD` | *(unset)* | Optional unattended seeding; needs `ADMIN_EMAIL` too |
 
 ### Per-user, in the profile menu
 
@@ -142,7 +213,8 @@ Restore by stopping the container, replacing the directory, and starting again.
 
 ```
 data/
-├── credentials.json      users, scrypt password hashes, per-user theme
+├── credentials.json      accounts, scrypt password hashes, per-user theme
+├── email-tokens.json     hashed, single-use reset and confirmation tokens
 ├── settings.json         site name, default theme, public URL, limits
 ├── .session-secret       session signing key (keeps logins alive on restart)
 └── content/
@@ -156,6 +228,12 @@ delete it to invalidate every session deliberately.
 ## Security notes
 
 - Passwords are hashed with scrypt (N=16384, r=8, p=1) and a per-user salt.
+- Reset and confirmation tokens are stored as SHA-256 hashes; the raw value
+  exists only in the recipient's inbox, so a leaked backup cannot be replayed.
+- Confirmation is spent by a POST, not by loading the link, so mail scanners
+  that prefetch URLs cannot burn a token before the recipient clicks it.
+- An account whose password is right but whose address is unconfirmed is told
+  so only after the password check, so the message leaks nothing to an outsider.
 - Sessions are HMAC-signed cookies, `HttpOnly` + `SameSite=Strict`, and
   `Secure` unless explicitly disabled.
 - Changing a password — by the user or an administrator — invalidates every

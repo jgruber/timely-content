@@ -6,9 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 import { ensureDirs, PORT, TMP_DIR } from './lib/paths.js';
 import { attachUser } from './lib/session.js';
-import { getSettings } from './lib/settings.js';
+import { getSettings, settingsStore } from './lib/settings.js';
+import { resolve, missingRequired, startupHelp } from './lib/config.js';
+import { verifyTransport } from './lib/email.js';
+import { sweepExpired } from './lib/emailtokens.js';
 import { seedAdminFromEnv, countUsers } from './lib/users.js';
 import { sweepTickets, reapOrphans } from './lib/content.js';
+import { migrateToEmailIdentity } from './lib/migrate.js';
 import siteRoutes from './routes/site.js';
 import authRoutes from './routes/auth.js';
 import contentRoutes from './routes/content.js';
@@ -110,9 +114,55 @@ process.on('uncaughtException', (err) => {
   console.error('[uncaught exception]', err?.stack || err);
 });
 
+/**
+ * Refuse to start on incomplete configuration rather than failing later in a
+ * way nobody sees -- a password reset that silently never arrives is worse
+ * than a container that will not boot and says exactly why.
+ */
+async function checkConfiguration() {
+  const stored = await settingsStore.read((data) => structuredClone(data));
+  const { values, envManaged, errors } = resolve(stored);
+
+  for (const e of errors) {
+    console.error(`[config] ${e.env} is invalid: ${e.message}. Falling back to the default.`);
+  }
+
+  const missing = missingRequired(values);
+  if (missing.length) {
+    console.error(startupHelp(missing));
+    process.exit(1);
+  }
+
+  if (envManaged.length) {
+    console.log(`[config] managed by the environment: ${envManaged.join(', ')}`);
+  }
+  if (!values.publicUrl) {
+    console.warn('[config] PUBLIC_URL is not set. QR codes will use the address of '
+      + 'each request, which is wrong behind a reverse proxy.');
+  }
+
+  if (values.passwordResetEnabled) {
+    const check = await verifyTransport(values.smtp);
+    if (check.ok) {
+      console.log(`[config] SMTP ready at ${values.smtp.host}:${values.smtp.port}`);
+    } else {
+      // Not fatal: the relay may simply be slow to come up alongside us.
+      console.warn(`[config] SMTP check failed: ${check.error}`);
+      console.warn('[config] Password-reset email will not work until this is resolved.');
+    }
+  } else {
+    console.log('[config] Password reset by email is disabled (PASSWORD_RESET_ENABLED=false).');
+  }
+
+  return values;
+}
+
 async function start() {
+  await checkConfiguration();
+  await migrateToEmailIdentity();
+
   const seeded = await seedAdminFromEnv();
-  if (seeded) console.log(`[init] seeded administrator "${seeded.username}" from the environment`);
+  if (seeded) console.log(`[init] seeded administrator "${seeded.email}" from the environment`);
 
   if ((await countUsers()) === 0) {
     console.log('[init] ============================================================');
@@ -127,6 +177,7 @@ async function start() {
   }
 
   setInterval(sweepTickets, 60 * 1000).unref();
+  setInterval(() => { void sweepExpired(); }, 10 * 60 * 1000).unref();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[timely-content] listening on port ${PORT}`);

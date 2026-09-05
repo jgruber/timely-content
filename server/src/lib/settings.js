@@ -1,90 +1,81 @@
 import { JsonStore } from './jsonstore.js';
 import { SETTINGS_FILE } from './paths.js';
-import { isValidMode, isValidAccent, DEFAULT_PREFS } from './appearance.js';
+import {
+  SCHEMA, resolve, defaults, getPath, setPath, schemaFor, publicValues, missingRequired,
+} from './config.js';
 
-export const DEFAULT_SETTINGS = {
-  version: 1,
-  // Name shown in the header, on the sign-in screen and in the browser tab.
-  siteName: 'Timely Content',
-  // Appearance used wherever there is no signed-in user to have a preference:
-  // the sign-in screen, the first-run setup, and every shared QR page.
-  defaultMode: DEFAULT_PREFS.mode,
-  defaultAccent: DEFAULT_PREFS.accent,
-  // Base URL that QR codes point at, e.g. https://share.example.com.
-  // Set this to whatever the TLS-terminating reverse proxy publishes.
-  publicUrl: '',
-  // When true, requests whose Host header does not match publicUrl are refused.
-  enforceHost: false,
-  maxUploadMb: 25,
-  sessionHours: 12,
-};
+export const settingsStore = new JsonStore(SETTINGS_FILE, { version: 1, ...defaults() });
 
-export const settingsStore = new JsonStore(SETTINGS_FILE, { ...DEFAULT_SETTINGS });
-
-export function getSettings() {
-  return settingsStore.read((s) => ({ ...DEFAULT_SETTINGS, ...s }));
+/** Effective settings: environment first, then settings.json, then defaults. */
+export async function getSettings() {
+  const stored = await settingsStore.read((data) => structuredClone(data));
+  return resolve(stored).values;
 }
 
-export function normaliseSettings(input, current) {
-  const next = { ...current };
-  const errors = [];
+/** Effective settings plus which keys the environment is managing. */
+export async function getSettingsDetail() {
+  const stored = await settingsStore.read((data) => structuredClone(data));
+  const { values, envManaged } = resolve(stored);
+  return { values, envManaged, publicValues: publicValues(values) };
+}
 
-  if (input.publicUrl !== undefined) {
-    const raw = String(input.publicUrl || '').trim().replace(/\/+$/, '');
-    if (raw === '') {
-      next.publicUrl = '';
-    } else {
-      let url;
-      try {
-        url = new URL(raw);
-      } catch {
-        errors.push('Public URL must be a full URL, e.g. https://share.example.com');
-      }
-      if (url) {
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-          errors.push('Public URL must use http or https.');
-        } else {
-          next.publicUrl = raw;
-        }
-      }
+/**
+ * Apply an admin edit.
+ *
+ * Keys supplied by the environment are refused rather than silently dropped:
+ * saving them would look like it worked until the next restart put the
+ * environment's value back.
+ */
+export async function saveSettings(input) {
+  const stored = await settingsStore.read((data) => structuredClone(data));
+  const { envManaged } = resolve(stored);
+
+  const errors = [];
+  const rejected = [];
+  const next = structuredClone(stored);
+
+  for (const s of SCHEMA) {
+    const incoming = getPath(input, s.key);
+    if (incoming === undefined) continue;
+
+    // A secret comes back from the browser as the placeholder when untouched.
+    if (s.secret && incoming === '__set__') continue;
+
+    if (envManaged.includes(s.key)) {
+      rejected.push(s.env);
+      continue;
+    }
+
+    try {
+      const parsed = s.parse(incoming);
+      s.check?.(parsed);
+      setPath(next, s.key, parsed);
+    } catch (err) {
+      errors.push(`${s.label} ${err.message}.`);
     }
   }
 
-  if (input.enforceHost !== undefined) next.enforceHost = !!input.enforceHost;
+  if (errors.length) return { errors };
 
-  if (input.siteName !== undefined) {
-    const name = String(input.siteName || '').trim().slice(0, 60);
-    if (!name) errors.push('Site name cannot be empty.');
-    else next.siteName = name;
+  // Enforce cross-field rules against the effective result, not the raw input.
+  const effective = resolve(next).values;
+  if (effective.enforceHost && !effective.publicUrl) {
+    return { errors: ['Hostname validation requires a public URL to validate against.'] };
+  }
+  const missing = missingRequired(effective);
+  if (missing.length) {
+    return {
+      errors: [`Cannot save: ${missing.map((m) => m.label).join(', ')} `
+        + `${missing.length === 1 ? 'is' : 'are'} required while password reset is enabled.`],
+    };
   }
 
-  if (input.defaultMode !== undefined) {
-    if (!isValidMode(input.defaultMode)) errors.push('Unknown default appearance mode.');
-    else next.defaultMode = input.defaultMode;
-  }
+  await settingsStore.write((data) => {
+    for (const s of SCHEMA) setPath(data, s.key, getPath(next, s.key));
+    data.version = 1;
+  });
 
-  if (input.defaultAccent !== undefined) {
-    if (!isValidAccent(input.defaultAccent)) errors.push('Unknown default colour theme.');
-    else next.defaultAccent = input.defaultAccent;
-  }
-
-  if (input.maxUploadMb !== undefined) {
-    const mb = Number(input.maxUploadMb);
-    if (!Number.isFinite(mb) || mb < 1 || mb > 2048) errors.push('Max upload size must be between 1 and 2048 MB.');
-    else next.maxUploadMb = Math.floor(mb);
-  }
-
-  if (input.sessionHours !== undefined) {
-    const hours = Number(input.sessionHours);
-    if (!Number.isFinite(hours) || hours < 1 || hours > 720) errors.push('Session length must be between 1 and 720 hours.');
-    else next.sessionHours = Math.floor(hours);
-  }
-
-  if (next.enforceHost && !next.publicUrl) {
-    errors.push('Hostname validation requires a public URL to validate against.');
-  }
-
-  return { next, errors };
+  return { values: effective, rejected };
 }
 
 /** Absolute URL a QR code should encode for a given share token. */
@@ -93,8 +84,22 @@ export function shareUrl(settings, token, req) {
   return `${base.replace(/\/+$/, '')}/c/${token}`;
 }
 
+/**
+ * Absolute URL for a password-reset link.
+ *
+ * Only ever built from the configured public URL. Deriving it from the request
+ * Host header would let an attacker send a forged Host and have the victim's
+ * reset link point at a server they control -- which is why PUBLIC_URL is a
+ * required setting whenever password reset is enabled.
+ */
+export function resetUrl(settings, token) {
+  if (!settings.publicUrl) return null;
+  return `${settings.publicUrl.replace(/\/+$/, '')}/reset/${token}`;
+}
+
 function fallbackBase(req) {
   if (!req) return '';
-  const proto = req.protocol || 'http';
-  return `${proto}://${req.get('host')}`;
+  return `${req.protocol || 'http'}://${req.get('host')}`;
 }
+
+export { schemaFor, SCHEMA };

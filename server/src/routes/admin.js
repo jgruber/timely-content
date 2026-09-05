@@ -1,14 +1,23 @@
 import { asyncRouter } from '../lib/router.js';
 import { requireAdmin, setSessionCookie } from '../lib/session.js';
 import {
-  usersStore, findUser, publicUser, newUserRecord, USERNAME_RE,
+  usersStore, findById, publicUser, newUserRecord,
+  emailTaken, normaliseEmail, validateEmail, DISPLAY_NAME_MAX,
 } from '../lib/users.js';
 import { hashPassword, validatePassword } from '../lib/passwords.js';
-import { getSettings, settingsStore, normaliseSettings, DEFAULT_SETTINGS } from '../lib/settings.js';
+import { getSettings, getSettingsDetail, saveSettings } from '../lib/settings.js';
+import { verifyTransport, sendMail, wrapEmail, escapeHtml } from '../lib/email.js';
+import { sendVerificationEmail } from '../lib/notify.js';
+import { revokeFor, RESET } from '../lib/emailtokens.js';
 import { contentStore, purge } from '../lib/content.js';
+import { SCHEMA } from '../lib/config.js';
 
 const router = asyncRouter();
 router.use(requireAdmin);
+
+function countAdmins(data) {
+  return data.users.filter((u) => u.isAdmin).length;
+}
 
 router.get('/users', async (req, res) => {
   const users = await usersStore.read((data) => data.users.map(publicUser));
@@ -20,121 +29,263 @@ router.get('/users', async (req, res) => {
     }
     return map;
   });
-  res.json({ users: users.map((u) => ({ ...u, contentCount: counts[u.username] || 0 })) });
+  res.json({ users: users.map((u) => ({ ...u, contentCount: counts[u.id] || 0 })) });
 });
 
+/**
+ * Create an account.
+ *
+ * The address starts unverified and a confirmation link goes out: a new user
+ * cannot sign in until they prove they own the inbox. Only the very first
+ * administrator, created during setup, skips this.
+ */
 router.post('/users', async (req, res) => {
-  const { username, password, isAdmin } = req.body || {};
-  if (!USERNAME_RE.test(String(username ?? ''))) {
-    return res.status(400).json({
-      error: 'Username must be 2-32 characters using letters, numbers, dot, dash or underscore.',
-    });
-  }
+  const { email, password, isAdmin, displayName } = req.body || {};
+
+  const badEmail = validateEmail(email);
+  if (badEmail) return res.status(400).json({ error: badEmail });
+
   const invalid = validatePassword(password);
   if (invalid) return res.status(400).json({ error: invalid });
 
+  const settings = await getSettings();
+  const address = normaliseEmail(email);
   const hash = await hashPassword(password);
-  const result = await usersStore.write((data) => {
-    if (findUser(data, username)) return { conflict: true };
-    const record = newUserRecord({ username, passwordHash: hash, isAdmin });
-    data.users.push(record);
-    return { user: publicUser(record) };
-  });
-  if (result.conflict) return res.status(409).json({ error: 'That username is already taken.' });
 
-  res.status(201).json({ user: { ...result.user, contentCount: 0 } });
+  const result = await usersStore.write((data) => {
+    if (emailTaken(data, address)) return { conflict: true };
+    const record = newUserRecord({
+      email: address,
+      displayName,
+      passwordHash: hash,
+      isAdmin,
+      // With no way to send mail there is no way to confirm an address, so
+      // the account would be permanently unusable. Trust it instead.
+      emailVerified: !settings.passwordResetEnabled,
+    });
+    data.users.push(record);
+    return { user: structuredClone(record) };
+  });
+
+  if (result.conflict) {
+    return res.status(409).json({ error: 'An account with that address already exists.' });
+  }
+
+  let verificationSent = false;
+  if (settings.passwordResetEnabled) {
+    try {
+      await sendVerificationEmail(settings, result.user);
+      verificationSent = true;
+    } catch (err) {
+      console.error('[admin] could not send confirmation email:', err.message);
+    }
+  }
+
+  res.status(201).json({
+    user: { ...publicUser(result.user), contentCount: 0 },
+    verificationSent,
+  });
 });
 
-router.post('/users/:username/password', async (req, res) => {
+/** Send another confirmation link to an account that has not verified yet. */
+router.post('/users/:id/resend-verification', async (req, res) => {
+  const settings = await getSettings();
+  if (!settings.passwordResetEnabled) {
+    return res.status(400).json({ error: 'Email is not configured on this server.' });
+  }
+
+  const user = await usersStore.read((data) => {
+    const found = findById(data, req.params.id);
+    return found ? structuredClone(found) : null;
+  });
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  if (user.emailVerified) return res.status(400).json({ error: 'That address is already confirmed.' });
+
+  try {
+    await sendVerificationEmail(settings, user);
+  } catch (err) {
+    return res.status(400).json({ error: `Could not send the email: ${err.message}` });
+  }
+  res.json({ ok: true, to: user.email });
+});
+
+/** Mark an address confirmed by hand, for when mail cannot reach someone. */
+router.post('/users/:id/verify', async (req, res) => {
+  const updated = await usersStore.write((data) => {
+    const record = findById(data, req.params.id);
+    if (!record) return null;
+    record.emailVerified = true;
+    return publicUser(record);
+  });
+  if (!updated) return res.status(404).json({ error: 'User not found.' });
+  res.json({ user: updated });
+});
+
+router.post('/users/:id/password', async (req, res) => {
   const invalid = validatePassword(req.body?.password);
   if (invalid) return res.status(400).json({ error: invalid });
 
   const hash = await hashPassword(req.body.password);
   const updated = await usersStore.write((data) => {
-    const record = findUser(data, req.params.username);
+    const record = findById(data, req.params.id);
     if (!record) return null;
     record.passwordHash = hash;
-    // Force the user off every device they were signed in on.
+    // Force the account off every device it was signed in on.
     record.tokenVersion = (record.tokenVersion || 1) + 1;
-    return publicUser(record);
+    return structuredClone(record);
   });
   if (!updated) return res.status(404).json({ error: 'User not found.' });
 
-  // Bumping tokenVersion signs the target out everywhere. When an admin
-  // resets their own password that would include this request's own session,
-  // so re-issue a cookie for the current device.
-  if (updated.username.toLowerCase() === req.user.username.toLowerCase()) {
-    const refreshed = await usersStore.read((data) => {
-      const record = findUser(data, updated.username);
-      return record ? structuredClone(record) : null;
-    });
-    if (refreshed) await setSessionCookie(res, refreshed);
-  }
+  await revokeFor(updated.id, RESET);
 
-  res.json({ ok: true, user: updated });
+  // An admin resetting their own password would otherwise log themselves out.
+  if (updated.id === req.user.id) await setSessionCookie(res, updated);
+
+  res.json({ ok: true, user: publicUser(updated) });
 });
 
-router.patch('/users/:username', async (req, res) => {
-  const { isAdmin } = req.body || {};
-  if (isAdmin === undefined) return res.status(400).json({ error: 'Nothing to update.' });
+/** Change an account's login address. */
+router.post('/users/:id/email', async (req, res) => {
+  const badEmail = validateEmail(req.body?.email);
+  if (badEmail) return res.status(400).json({ error: badEmail });
+
+  const address = normaliseEmail(req.body.email);
+  const settings = await getSettings();
 
   const result = await usersStore.write((data) => {
-    const record = findUser(data, req.params.username);
+    const record = findById(data, req.params.id);
     if (!record) return { missing: true };
-    // Never allow the last administrator to be demoted -- that would lock
-    // everyone out of user management permanently.
-    if (record.isAdmin && !isAdmin) {
-      const admins = data.users.filter((u) => u.isAdmin).length;
-      if (admins <= 1) return { lastAdmin: true };
+    if (emailTaken(data, address, record.id)) return { taken: true };
+    const changed = normaliseEmail(record.email) !== address;
+    record.email = address;
+    if (changed && settings.passwordResetEnabled) {
+      record.emailVerified = false;
+      record.tokenVersion = (record.tokenVersion || 1) + 1;
     }
-    record.isAdmin = !!isAdmin;
+    return { user: structuredClone(record), changed };
+  });
+
+  if (result.missing) return res.status(404).json({ error: 'User not found.' });
+  if (result.taken) return res.status(409).json({ error: 'Another account already uses that address.' });
+
+  if (result.changed && settings.passwordResetEnabled) {
+    try {
+      await sendVerificationEmail(settings, result.user);
+    } catch (err) {
+      console.error('[admin] could not send confirmation email:', err.message);
+    }
+  }
+
+  res.json({ user: publicUser(result.user) });
+});
+
+router.patch('/users/:id', async (req, res) => {
+  const { isAdmin, displayName } = req.body || {};
+  if (isAdmin === undefined && displayName === undefined) {
+    return res.status(400).json({ error: 'Nothing to update.' });
+  }
+
+  const result = await usersStore.write((data) => {
+    const record = findById(data, req.params.id);
+    if (!record) return { missing: true };
+
+    if (isAdmin !== undefined) {
+      // Never let the last administrator be demoted -- that would lock
+      // everyone out of user management permanently.
+      if (record.isAdmin && !isAdmin && countAdmins(data) <= 1) return { lastAdmin: true };
+      record.isAdmin = !!isAdmin;
+    }
+    if (displayName !== undefined) {
+      const name = String(displayName).trim().slice(0, DISPLAY_NAME_MAX);
+      if (!name) return { badName: true };
+      record.displayName = name;
+    }
     return { user: publicUser(record) };
   });
 
   if (result.missing) return res.status(404).json({ error: 'User not found.' });
   if (result.lastAdmin) return res.status(400).json({ error: 'This is the only administrator.' });
+  if (result.badName) return res.status(400).json({ error: 'Display name cannot be empty.' });
   res.json({ user: result.user });
 });
 
-router.delete('/users/:username', async (req, res) => {
-  const target = req.params.username;
-  if (target.toLowerCase() === req.user.username.toLowerCase()) {
+router.delete('/users/:id', async (req, res) => {
+  if (req.params.id === req.user.id) {
     return res.status(400).json({ error: 'You cannot delete your own account.' });
   }
 
   const result = await usersStore.write((data) => {
-    const record = findUser(data, target);
+    const record = findById(data, req.params.id);
     if (!record) return { missing: true };
-    if (record.isAdmin && data.users.filter((u) => u.isAdmin).length <= 1) return { lastAdmin: true };
+    if (record.isAdmin && countAdmins(data) <= 1) return { lastAdmin: true };
     data.users.splice(data.users.indexOf(record), 1);
-    return { username: record.username };
+    return { id: record.id };
   });
 
   if (result.missing) return res.status(404).json({ error: 'User not found.' });
   if (result.lastAdmin) return res.status(400).json({ error: 'This is the only administrator.' });
 
-  // Remove everything the deleted user owned, so no orphaned share links survive.
+  await revokeFor(result.id);
+
+  // Remove everything they owned, so no orphaned share links survive.
   const owned = await contentStore.read((data) =>
-    data.items.filter((i) => i.owner === result.username).map((i) => i.id));
+    data.items.filter((i) => i.owner === result.id).map((i) => i.id));
   for (const id of owned) await purge(id);
 
   res.json({ ok: true, removedContent: owned.length });
 });
 
+// ---- System settings -------------------------------------------------------
+
 router.get('/settings', async (req, res) => {
-  res.json({ settings: await getSettings() });
+  const { envManaged, publicValues: values } = await getSettingsDetail();
+  res.json({
+    settings: values,
+    // Keys the environment is managing, so the UI can show them read-only
+    // instead of offering an edit the next restart would undo.
+    envManaged,
+    schema: SCHEMA.map((s) => ({ key: s.key, env: s.env, label: s.label, help: s.help })),
+  });
 });
 
 router.put('/settings', async (req, res) => {
-  const current = await getSettings();
-  const { next, errors } = normaliseSettings(req.body || {}, current);
-  if (errors.length) return res.status(400).json({ error: errors.join(' ') });
+  const result = await saveSettings(req.body || {});
+  if (result.errors) return res.status(400).json({ error: result.errors.join(' ') });
 
-  const saved = await settingsStore.write((data) => {
-    Object.assign(data, DEFAULT_SETTINGS, next);
-    return structuredClone(data);
-  });
-  res.json({ settings: saved });
+  const { envManaged, publicValues: values } = await getSettingsDetail();
+  res.json({ settings: values, envManaged, rejected: result.rejected });
+});
+
+/** Prove the SMTP settings work by sending a real message. */
+router.post('/settings/test-email', async (req, res) => {
+  const settings = await getSettings();
+  if (!settings.smtp.host) {
+    return res.status(400).json({ error: 'Set an SMTP host before testing.' });
+  }
+
+  const verified = await verifyTransport(settings.smtp);
+  if (!verified.ok) {
+    return res.status(400).json({ error: `Could not reach the mail server: ${verified.error}` });
+  }
+
+  const to = normaliseEmail(req.body?.to) || normaliseEmail(req.user.email);
+  if (!to) return res.status(400).json({ error: 'No address to send to.' });
+
+  try {
+    const result = await sendMail(settings.smtp, {
+      to,
+      subject: `${settings.siteName} test message`,
+      html: wrapEmail(
+        `<p>This is a test message from <strong>${escapeHtml(settings.siteName)}</strong>.</p>
+         <p>If you are reading it, confirmation and password-reset email will reach
+            your users.</p>`,
+        settings.siteName,
+      ),
+    });
+    res.json({ ok: true, to, delivered: result.sent, fallback: !!result.fallback });
+  } catch (err) {
+    res.status(400).json({ error: `The mail server rejected the message: ${err.message}` });
+  }
 });
 
 export default router;

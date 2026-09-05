@@ -10,7 +10,8 @@ import { Button, Input, Field, Alert, Card, Icon } from '../components/ui.jsx';
 export default function SetupPage() {
   const { setupRequired, completeSetup, siteName } = useAuth();
 
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
@@ -29,7 +30,8 @@ export default function SetupPage() {
     setBusy(true);
     try {
       await completeSetup({
-        username: username.trim(),
+        email: email.trim(),
+        displayName: displayName.trim(),
         password,
         publicUrl: publicUrl.trim(),
       });
@@ -53,7 +55,8 @@ export default function SetupPage() {
             <h1 className="text-xl font-semibold text-ink">Welcome to {siteName}</h1>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
               Nobody has signed in here yet. Create the first account — it will be an
-              administrator, able to add other users later.
+              administrator, able to add other users later. This is the only account
+              that does not need its email confirmed first.
             </p>
           </div>
         </div>
@@ -61,21 +64,32 @@ export default function SetupPage() {
         <Card className="p-6">
           <form onSubmit={submit} className="space-y-4">
             <Field
-              label="Username"
-              htmlFor="setup-username"
-              hint="Letters, numbers, dot, dash or underscore."
+              label="Email address"
+              htmlFor="setup-email"
+              hint="You sign in with this, and password resets are sent here."
             >
               <Input
-                id="setup-username"
-                type="text"
+                id="setup-email"
+                type="email"
+                inputMode="email"
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck="false"
                 autoFocus
                 required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+
+            <Field label="Display name (optional)" htmlFor="setup-name" hint="Shown in the app. Defaults to the part before the @.">
+              <Input
+                id="setup-name"
+                type="text"
+                maxLength={60}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
               />
             </Field>
 

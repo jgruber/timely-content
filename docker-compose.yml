@@ -17,9 +17,34 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       # Number of proxy hops to trust for X-Forwarded-* headers.
       TRUST_PROXY_HOPS: 1
+      # --- Required while password reset is enabled -----------------------
+      # The service refuses to start without these and logs how to set them.
+      # PUBLIC_URL is required because reset links must never be built from
+      # the request Host header, which an attacker can forge.
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+
+      # Optional SMTP details.
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+
+      # Set to false to run with no mail server at all. The forgot-password
+      # link is hidden and new accounts skip email confirmation.
+      PASSWORD_RESET_ENABLED: ${PASSWORD_RESET_ENABLED:-true}
+
+      # Every settings.json value has an environment override; the environment
+      # always wins and the admin screen shows those fields read-only.
+      # SITE_NAME, DEFAULT_MODE, DEFAULT_ACCENT, ENFORCE_HOST,
+      # MAX_UPLOAD_MB, SESSION_HOURS, RESET_TOKEN_MINUTES
+      SITE_NAME: ${SITE_NAME:-}
+
       # Used only on first start, when credentials.json does not yet exist.
-      # Leave unset to have a random password generated and printed to the log.
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      # Set BOTH to seed the first administrator without the setup screen.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
 
     ports:

@@ -65,10 +65,10 @@ function ProfileMenu() {
         )}
       >
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-ink">
-          {user.username.charAt(0).toUpperCase()}
+          {(user.displayName || user.email).charAt(0).toUpperCase()}
         </span>
         <span className="hidden max-w-[10rem] truncate text-sm font-medium text-ink sm:inline">
-          {user.username}
+          {user.displayName || user.email}
         </span>
         <svg className="h-4 w-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -83,7 +83,8 @@ function ProfileMenu() {
             border-line bg-panel shadow-lg"
         >
           <div className="border-b border-line px-3 py-3">
-            <p className="truncate text-sm font-medium text-ink">{user.username}</p>
+            <p className="truncate text-sm font-medium text-ink">{user.displayName || user.email}</p>
+            <p className="truncate text-xs text-muted">{user.email}</p>
             <p className="mt-0.5 text-xs text-muted">
               {user.isAdmin ? `Administrator of ${siteName}` : `Signed in to ${siteName}`}
             </p>

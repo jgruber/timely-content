@@ -6,6 +6,9 @@ import { Spinner } from './components/ui.jsx';
 
 import LoginPage from './pages/Login.jsx';
 import SetupPage from './pages/Setup.jsx';
+import ForgotPage from './pages/Forgot.jsx';
+import ResetPage from './pages/Reset.jsx';
+import VerifyPage from './pages/Verify.jsx';
 import LibraryPage from './pages/Library.jsx';
 import UploadPage from './pages/Upload.jsx';
 import SettingsPage from './pages/Settings.jsx';
@@ -67,6 +70,9 @@ export default function App() {
 
       <Route path="/setup" element={<Navigate to="/" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot" element={<ForgotPage />} />
+      <Route path="/reset/:token" element={<ResetPage />} />
+      <Route path="/verify/:token" element={<VerifyPage />} />
 
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route path="/" element={<LibraryPage />} />

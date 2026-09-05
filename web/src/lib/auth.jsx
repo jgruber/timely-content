@@ -65,8 +65,8 @@ export function AuthProvider({ children }) {
     } catch { /* keep the copy we already have */ }
   }, []);
 
-  const login = useCallback(async (username, password) => {
-    const res = await api.login(username, password);
+  const login = useCallback(async (email, password) => {
+    const res = await api.login(email, password);
     setUser(res.user);
     return res.user;
   }, []);
@@ -99,6 +99,7 @@ export function AuthProvider({ children }) {
       login, logout, completeSetup, updatePrefs, refreshSite,
       siteName: site?.siteName || FALLBACK_SITE.siteName,
       setupRequired: !!site?.setupRequired,
+      passwordResetEnabled: !!site?.passwordResetEnabled,
     }),
     [user, site, loading, prefs, login, logout, completeSetup, updatePrefs, refreshSite],
   );

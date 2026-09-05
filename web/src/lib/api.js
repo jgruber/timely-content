@@ -41,11 +41,23 @@ export const api = {
   setup: (payload) => request('/api/site/setup', { method: 'POST', body: payload }),
 
   me: () => request('/api/auth/me'),
-  login: (username, password) => request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   changePassword: (currentPassword, newPassword) =>
     request('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } }),
+  changeEmail: (password, email) =>
+    request('/api/auth/email', { method: 'POST', body: { password, email } }),
+  saveProfile: (displayName) => request('/api/auth/profile', { method: 'PUT', body: { displayName } }),
   savePrefs: (prefs) => request('/api/auth/prefs', { method: 'PUT', body: prefs }),
+
+  forgotPassword: (email) => request('/api/auth/forgot', { method: 'POST', body: { email } }),
+  checkResetToken: (token) => request(`/api/auth/reset/${encodeURIComponent(token)}`),
+  resetPassword: (token, password) =>
+    request('/api/auth/reset', { method: 'POST', body: { token, password } }),
+  checkVerifyToken: (token) => request(`/api/auth/verify/${encodeURIComponent(token)}`),
+  confirmEmail: (token) => request('/api/auth/verify', { method: 'POST', body: { token } }),
+  resendVerification: (email) =>
+    request('/api/auth/resend-verification', { method: 'POST', body: { email } }),
 
   listContent: () => request('/api/content'),
   getContent: (id) => request(`/api/content/${id}`),
@@ -59,15 +71,21 @@ export const api = {
 
   listUsers: () => request('/api/admin/users'),
   createUser: (payload) => request('/api/admin/users', { method: 'POST', body: payload }),
-  setUserPassword: (username, password) =>
-    request(`/api/admin/users/${encodeURIComponent(username)}/password`, { method: 'POST', body: { password } }),
-  setUserRole: (username, isAdmin) =>
-    request(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'PATCH', body: { isAdmin } }),
-  deleteUser: (username) =>
-    request(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
+  setUserPassword: (id, password) =>
+    request(`/api/admin/users/${encodeURIComponent(id)}/password`, { method: 'POST', body: { password } }),
+  setUserEmail: (id, email) =>
+    request(`/api/admin/users/${encodeURIComponent(id)}/email`, { method: 'POST', body: { email } }),
+  patchUser: (id, payload) =>
+    request(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload }),
+  deleteUser: (id) => request(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resendUserVerification: (id) =>
+    request(`/api/admin/users/${encodeURIComponent(id)}/resend-verification`, { method: 'POST' }),
+  markUserVerified: (id) =>
+    request(`/api/admin/users/${encodeURIComponent(id)}/verify`, { method: 'POST' }),
 
   getSettings: () => request('/api/admin/settings'),
   saveSettings: (payload) => request('/api/admin/settings', { method: 'PUT', body: payload }),
+  sendTestEmail: (to) => request('/api/admin/settings/test-email', { method: 'POST', body: { to } }),
 };
 
 export const qrImageUrl = (id, size = 512) => `/api/content/${id}/qr.png?size=${size}`;
