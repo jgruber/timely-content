@@ -13,6 +13,7 @@ import {
 } from '../lib/content.js';
 import { randomId, randomToken } from '../lib/tokens.js';
 import { zipEntryNames, buildZip, zipFilename } from '../lib/zip.js';
+import { decodeUploadName, setDownloadHeaders } from '../lib/http.js';
 
 const router = asyncRouter();
 router.use(requireAuth);
@@ -75,7 +76,7 @@ function cleanTitle(value, fallback) {
 }
 
 function isMarkdownName(name) {
-  const ext = path.extname(name || '').toLowerCase();
+  const ext = path.extname(decodeUploadName(name) || '').toLowerCase();
   return ext === '.md' || ext === '.markdown';
 }
 
@@ -204,7 +205,7 @@ router.post('/upload', receiveUpload, async (req, res) => {
 
   const files = uploaded.map((f) => ({
     id: randomId(),
-    name: String(f.originalname || 'download').slice(0, 255),
+    name: decodeUploadName(f.originalname || 'download').slice(0, 255),
     mime: f.mimetype || 'application/octet-stream',
     size: f.size,
     hasThumb: false,
@@ -212,7 +213,7 @@ router.post('/upload', receiveUpload, async (req, res) => {
 
   const item = newItem({
     owner: req.user.id,
-    title: cleanTitle(req.body.title, single ? uploaded[0].originalname : `${files.length} files`),
+    title: cleanTitle(req.body.title, single ? files[0].name : `${files.length} files`),
     kind: markdownNote ? KIND_MARKDOWN : KIND_FILE,
     files: markdownNote ? [] : files,
     mime: single ? files[0].mime : 'application/zip',
@@ -361,9 +362,7 @@ router.get('/:id/qr.png', async (req, res, next) => {
     });
 
     const safe = (item.title || 'content').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'content';
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition', `attachment; filename="qr-${safe}.png"`);
+    setDownloadHeaders(res, { filename: `qr-${safe}.png`, mime: 'image/png' });
     res.send(png);
   } catch (err) {
     next(err);
@@ -406,10 +405,7 @@ router.get('/:id/download', async (req, res, next) => {
   if (!item) return res.status(404).json({ error: 'Content not found.' });
 
   if (item.kind === KIND_MARKDOWN) {
-    res.setHeader('Content-Type', 'text/markdown');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${encodeURIComponent(`${item.title || 'note'}.md`)}"`);
+    setDownloadHeaders(res, { filename: `${item.title || 'note'}.md`, mime: 'text/markdown' });
     return createReadStream(blobPath(item.id)).on('error', next).pipe(res);
   }
   if (item.files.length === 1) return sendFile(res, item, item.files[0].id, next);
@@ -423,13 +419,13 @@ export async function sendZip(res, item, next) {
     const names = zipEntryNames(item.files);
     const { size, stream } = await buildZip(item.id, item.files, names);
 
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${encodeURIComponent(zipFilename(item.title))}"`);
-    // Known ahead of time because nothing is compressed, so the recipient gets
-    // a real progress bar rather than an open-ended download.
-    if (size >= 0) res.setHeader('Content-Length', String(size));
+    // Size is known ahead of time because nothing is compressed, so the
+    // recipient gets a real progress bar rather than an open-ended download.
+    setDownloadHeaders(res, {
+      filename: zipFilename(item.title),
+      mime: 'application/zip',
+      size: size >= 0 ? size : undefined,
+    });
 
     stream.on('error', next).pipe(res);
   } catch (err) {
@@ -441,11 +437,7 @@ export function sendFile(res, item, fileId, next) {
   const file = (item.files || []).find((f) => f.id === fileId);
   if (!file) return res.status(404).json({ error: 'File not found.' });
 
-  res.setHeader('Content-Type', file.mime || 'application/octet-stream');
-  res.setHeader('Content-Length', String(file.size));
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Content-Disposition',
-    `attachment; filename="${encodeURIComponent(file.name || 'download')}"`);
+  setDownloadHeaders(res, { filename: file.name, mime: file.mime, size: file.size });
   return createReadStream(filePath(item.id, file.id)).on('error', next).pipe(res);
 }
 

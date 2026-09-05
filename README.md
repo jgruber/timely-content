@@ -116,6 +116,10 @@ so deflating would burn CPU across the whole payload for nothing. It also means
 the archive size is known before the first byte is sent, so the download shows a
 real progress bar instead of an open-ended spinner.
 
+Any file type is accepted — documents, spreadsheets, PDFs, archives and
+proprietary binary formats are all stored and returned byte for byte, with
+their original names intact including spaces and accents.
+
 Previews are generated in the browser at upload time, from the image it has
 already decoded. That keeps a native image library out of the deployment
 entirely, and "the browser could decode it" is the right test for whether a

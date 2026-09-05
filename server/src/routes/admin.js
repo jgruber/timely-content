@@ -11,6 +11,7 @@ import { sendVerificationEmail } from '../lib/notify.js';
 import { revokeFor, RESET } from '../lib/emailtokens.js';
 import { contentStore, purge, publicItem, anyItem, KIND_MARKDOWN } from '../lib/content.js';
 import { sendZip, sendFile } from './content.js';
+import { setDownloadHeaders } from '../lib/http.js';
 import { shareUrl } from '../lib/settings.js';
 import { blobPath } from '../lib/paths.js';
 import { createReadStream } from 'node:fs';
@@ -299,10 +300,7 @@ router.get('/content/:id/download', async (req, res, next) => {
   if (!item) return res.status(404).json({ error: 'Content not found.' });
 
   if (item.kind === KIND_MARKDOWN) {
-    res.setHeader('Content-Type', 'text/markdown');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${encodeURIComponent(`${item.title || 'note'}.md`)}"`);
+    setDownloadHeaders(res, { filename: `${item.title || 'note'}.md`, mime: 'text/markdown' });
     return createReadStream(blobPath(item.id)).on('error', next).pipe(res);
   }
   if (item.files?.length === 1) return sendFile(res, item, item.files[0].id, next);
