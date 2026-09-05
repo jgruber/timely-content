@@ -199,3 +199,16 @@ body {
   background-position: center;
   background-repeat: no-repeat;
 }
+
+/* Number fields: keep the stepper visible instead of Chrome's hover-only
+   spinner, so a numeric field reads as numeric at a glance. */
+.tc-number::-webkit-inner-spin-button,
+.tc-number::-webkit-outer-spin-button {
+  opacity: 1;
+  height: auto;
+  margin-left: 0.25rem;
+}
+/* Firefox shows its own stepper; make sure it is not suppressed. */
+@supports (-moz-appearance: number-input) {
+  .tc-number { -moz-appearance: number-input; }
+}

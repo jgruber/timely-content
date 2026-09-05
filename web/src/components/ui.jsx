@@ -58,8 +58,39 @@ const CONTROL = 'w-full rounded-lg border border-line bg-panel px-3 py-2.5 text-
   + 'min-h-11 text-base sm:text-sm transition-colors focus:border-accent focus:outline-none '
   + 'focus:ring-2 focus:ring-accent/30 disabled:opacity-60';
 
-export function Input({ className, ...props }) {
-  return <input {...props} className={cx(CONTROL, className)} />;
+export function Input({ className, type = 'text', ...props }) {
+  return <input {...props} type={type} className={cx(CONTROL, className)} />;
+}
+
+/**
+ * Numeric field.
+ *
+ * Kept separate from Input because a number needs more than `type="number"`:
+ * a numeric keypad on mobile, a visible stepper, and tolerance for the box
+ * being momentarily empty. Coercing with Number() on every keystroke turns a
+ * cleared field into 0 and makes it impossible to retype the first digit, so
+ * the raw string is held here and only parsed on the way out.
+ *
+ * `onChange` receives a number, or null while the box is empty.
+ */
+export function NumberInput({ className, value, onChange, min, max, step = 1, ...props }) {
+  return (
+    <input
+      {...props}
+      type="number"
+      inputMode="numeric"
+      // Chrome only paints the spinner on hover/focus; this keeps it visible.
+      className={cx(CONTROL, 'tc-number', className)}
+      min={min}
+      max={max}
+      step={step}
+      value={value === null || value === undefined ? '' : value}
+      onChange={(e) => {
+        const raw = e.target.value;
+        onChange(raw === '' ? null : Number(raw), raw);
+      }}
+    />
+  );
 }
 
 export function Select({ className, children, ...props }) {
@@ -217,6 +248,7 @@ const PATHS = {
   key: 'M15 7a5 5 0 1 1-4.6 6.9L4 20.3V16h4v-3l2.4-2.4A5 5 0 0 1 15 7Zm2 2h.01',
   shield: 'M12 3l8 3v6c0 4.4-3.2 8.2-8 9-4.8-.8-8-4.6-8-9V6l8-3Z',
   menu: 'M4 7h16M4 12h16M4 17h16',
+  install: 'M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3',
 };
 
 export function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.8 }) {

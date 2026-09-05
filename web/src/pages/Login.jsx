@@ -45,6 +45,7 @@ export default function LoginPage() {
             <Field label="Username" htmlFor="username">
               <Input
                 id="username"
+                type="text"
                 name="username"
                 autoComplete="username"
                 autoCapitalize="none"

@@ -48,6 +48,7 @@ export default function SharePanel({ item, warnNoPublicUrl }) {
         <div className="flex gap-2">
           <input
             id={`share-url-${item.id}`}
+            type="url"
             readOnly
             value={item.shareUrl}
             onFocus={(e) => e.target.select()}

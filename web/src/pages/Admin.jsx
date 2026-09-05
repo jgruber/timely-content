@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import {
-  Button, Card, Input, Field, Alert, Icon, Spinner, Modal, Toggle, Badge, cx,
+  Button, Card, Input, NumberInput, Field, Alert, Icon, Spinner, Modal, Toggle, Badge, cx,
 } from '../components/ui.jsx';
 import { relativeDate } from '../lib/format.js';
 import ThemePicker from '../components/ThemePicker.jsx';
@@ -186,6 +186,7 @@ function CreateUserModal({ open, onClose, onCreated }) {
         <Field label="Username" htmlFor="new-username" hint="Letters, numbers, dot, dash or underscore.">
           <Input
             id="new-username"
+            type="text"
             required
             autoCapitalize="none"
             autoCorrect="off"
@@ -349,6 +350,12 @@ function SettingsTab() {
 
   const save = async (e) => {
     e.preventDefault();
+
+    if (settings.maxUploadMb === null || settings.sessionHours === null) {
+      setError('Upload size and session length both need a value.');
+      return;
+    }
+
     setBusy(true);
     setError('');
     setSaved(false);
@@ -379,6 +386,7 @@ function SettingsTab() {
         <Field label="Site name" htmlFor="site-name">
           <Input
             id="site-name"
+            type="text"
             maxLength={60}
             value={settings.siteName}
             onChange={(e) => update({ siteName: e.target.value })}
@@ -448,31 +456,31 @@ function SettingsTab() {
       <Card className="space-y-4 p-4">
         <h2 className="font-medium text-ink">Limits</h2>
 
-        <Field label="Maximum upload size (MB)" htmlFor="max-upload">
-          <Input
+        <Field
+          label="Maximum upload size (MB)"
+          htmlFor="max-upload"
+          hint="Between 1 and 2048 MB."
+        >
+          <NumberInput
             id="max-upload"
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="2048"
+            min={1}
+            max={2048}
             value={settings.maxUploadMb}
-            onChange={(e) => update({ maxUploadMb: Number(e.target.value) })}
+            onChange={(n) => update({ maxUploadMb: n })}
           />
         </Field>
 
         <Field
           label="Session length (hours)"
           htmlFor="session-hours"
-          hint="How long a sign-in lasts before it must be renewed."
+          hint="How long a sign-in lasts before it must be renewed. 1 to 720 hours."
         >
-          <Input
+          <NumberInput
             id="session-hours"
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="720"
+            min={1}
+            max={720}
             value={settings.sessionHours}
-            onChange={(e) => update({ sessionHours: Number(e.target.value) })}
+            onChange={(n) => update({ sessionHours: n })}
           />
         </Field>
       </Card>

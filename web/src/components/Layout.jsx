@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
+import { canInstall, onInstallAvailabilityChange, promptInstall } from '../lib/pwa.js';
 import { Icon, cx } from './ui.jsx';
 
 function navClass({ isActive }) {
@@ -22,7 +23,12 @@ function ProfileMenu() {
   const { user, logout, siteName } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [installable, setInstallable] = useState(canInstall);
   const wrapRef = useRef(null);
+
+  // The browser decides when installing is possible; mirror that state so the
+  // menu item appears and disappears with it.
+  useEffect(() => onInstallAvailabilityChange(setInstallable), []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -93,6 +99,19 @@ function ProfileMenu() {
                 <Icon name="shield" className="h-4 w-4 text-muted" />
                 Administration
               </Link>
+            )}
+            {installable && (
+              <button
+                role="menuitem"
+                className={itemClass}
+                onClick={async () => {
+                  setOpen(false);
+                  await promptInstall();
+                }}
+              >
+                <Icon name="install" className="h-4 w-4 text-muted" />
+                Install app
+              </button>
             )}
           </div>
 

@@ -1,4 +1,4 @@
-import { Field, Input, Toggle, Icon, cx } from './ui.jsx';
+import { Field, NumberInput, Toggle, Icon, cx } from './ui.jsx';
 
 /**
  * Access-limit editor shared by the create, upload and manage screens.
@@ -42,17 +42,12 @@ export default function AccessControls({ limit, onLimitChange, deleteOnExhaust, 
           htmlFor={`${idPrefix}-count`}
           hint="How many times the QR code may be scanned before it stops working."
         >
-          <Input
+          <NumberInput
             id={`${idPrefix}-count`}
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="1000000"
-            value={limit ?? 1}
-            onChange={(e) => {
-              const raw = e.target.value;
-              onLimitChange(raw === '' ? '' : Number(raw));
-            }}
+            min={1}
+            max={1000000}
+            value={limit}
+            onChange={(n) => onLimitChange(n === null ? '' : n)}
           />
         </Field>
       )}

@@ -35,6 +35,7 @@ and no password is ever generated for you.
 | Concern | Behaviour |
 | --- | --- |
 | First run | Setup screen creates the first administrator; no default password |
+| Install | Installable as a PWA from the browser, or "Install app" in the profile menu |
 | Authoring | WYSIWYG markdown editor, or upload any file |
 | Sharing | Each item gets a QR code and a link at `/c/<token>` |
 | Access limit | A fixed number of opens, or unlimited |
@@ -177,6 +178,22 @@ DATA_DIR=../data PORT=9099 COOKIE_SECURE=false ADMIN_PASSWORD=devpassword123 npm
 # Terminal 2 -- Vite dev server on :5173, proxying /api to :9099
 cd web && npm install && npm run dev
 ```
+
+## Installing as an app
+
+The site ships a web app manifest and a service worker, so browsers offer to
+install it — Chrome's address-bar install button, Safari's *Add to Home
+Screen*, or **Install app** in the profile menu. Installed, it opens
+standalone with its own icon and jump-list shortcuts to Compose and Upload.
+
+The service worker deliberately caches almost nothing. `/api/**` is never
+cached or intercepted: shared content is access limited and can self-destruct,
+so a cached copy could hand someone a document after their last permitted
+view. Only the app shell and content-hashed build assets are stored, which is
+enough to survive a flaky connection.
+
+Installability needs a secure context, so put the reverse proxy's TLS in front
+first (`localhost` also counts while testing).
 
 ## License
 

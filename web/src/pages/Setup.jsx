@@ -67,6 +67,7 @@ export default function SetupPage() {
             >
               <Input
                 id="setup-username"
+                type="text"
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"

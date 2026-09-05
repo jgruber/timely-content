@@ -81,6 +81,7 @@ export default function ComposePage() {
             <Field label="Title" htmlFor="title">
               <Input
                 id="title"
+                type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Release notes for v2.1"

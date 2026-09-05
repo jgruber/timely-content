@@ -66,8 +66,20 @@ if (fs.existsSync(WEB_DIST)) {
   app.use(express.static(WEB_DIST, {
     index: false,
     setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
-      else res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      const name = path.basename(filePath);
+      // The service worker and manifest must be revalidated on every load,
+      // otherwise a deploy is pinned behind a year-long immutable cache and
+      // the installed app never updates. Build output under /assets/ is
+      // content-hashed, so it keeps the long immutable lifetime.
+      if (name === 'sw.js' || name === 'manifest.webmanifest' || filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      if (name === 'sw.js') {
+        // Allow the worker to control the whole origin, not just /.
+        res.setHeader('Service-Worker-Allowed', '/');
+      }
     },
   }));
   app.get('*', (req, res) => {

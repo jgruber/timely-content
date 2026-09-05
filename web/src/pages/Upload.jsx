@@ -108,6 +108,7 @@ export default function UploadPage() {
         <Field label="Title" htmlFor="upload-title" hint="Shown to you in your library, and to the recipient.">
           <Input
             id="upload-title"
+            type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Q3 invoice"
