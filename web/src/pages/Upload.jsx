@@ -212,7 +212,6 @@ export default function UploadPage() {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Holiday photos"
             maxLength={200}
           />
         </Field>

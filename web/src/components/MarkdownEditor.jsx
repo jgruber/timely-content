@@ -67,7 +67,7 @@ export default function MarkdownEditor({ initialValue = '', onChange, height = '
       // author needing to know link syntax.
       extendedAutolinks: true,
       linkAttributes: { target: '_blank', rel: 'noopener noreferrer' },
-      placeholder: 'Write your instructions here. Paste a link straight onto highlighted text to turn it into a hyperlink.',
+      placeholder: 'Start typing. Paste a web address onto highlighted text to turn it into a link.',
       toolbarItems: [
         [
           labelledButton({ text: 'Normal', tooltip: 'Normal paragraph text', command: 'paragraph' }),

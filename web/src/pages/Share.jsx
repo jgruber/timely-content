@@ -116,8 +116,8 @@ function RemainingNote({ payload }) {
   if (payload.willVanish) {
     return (
       <p className="text-center text-xs text-danger">
-        This was the final permitted view. The content is being removed from the server --
-        save what you need now.
+        This was the final permitted view. The content is being removed from the
+        server, so save what you need now.
       </p>
     );
   }
@@ -222,7 +222,7 @@ function FileList({ payload }) {
 
         {images > 0 && (
           <p className="mt-3 text-center text-xs text-muted">
-            On a phone, open a picture and hold it to save it straight to your photos.
+            On a phone, open an image and hold it to save it directly to your device.
           </p>
         )}
 

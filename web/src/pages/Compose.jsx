@@ -85,13 +85,16 @@ export default function ComposePage() {
       ) : (
         <>
           <Card className="space-y-4 p-4">
-            <Field label="Title" htmlFor="title">
+            <Field
+              label="Title"
+              htmlFor="title"
+              hint="Shown in your library, and to the recipient."
+            >
               <Input
                 id="title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Release notes for v2.1"
                 maxLength={200}
               />
             </Field>
