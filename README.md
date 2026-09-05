@@ -70,9 +70,12 @@ The first start after upgrading migrates `credentials.json` automatically:
 | Install | Installable as a PWA from the browser, or "Install app" in the profile menu |
 | Oversight | Administrators see and can remove content posted by any account |
 | Support | **About** in the profile menu shows the version and links to the issue tracker |
-| Authoring | WYSIWYG markdown editor, or upload any file |
+| Authoring | WYSIWYG markdown editor, or upload one file or many |
+| Packages | A whole selection shares one QR code and one access count |
 | Sharing | Each item gets a QR code and a link at `/c/<token>` |
 | Access limit | A fixed number of opens, or unlimited |
+| Expiry | An optional date and time, independent of the access count |
+| Reactivation | An ended share keeps its files and can be given a fresh QR code |
 | Self-destruct | Optionally deletes the content after the final permitted open |
 | Rotation | Issue a new QR code at any time; the old one dies and the count resets |
 | Markdown | Rendered in the browser, and stays editable |
@@ -90,6 +93,49 @@ Markdown comes back in that response. Other files receive a single-use ticket
 which the browser immediately redeems, so the bytes are delivered exactly once
 per access spent — and a self-destructing item is reaped only after its bytes
 have actually left.
+
+## Sharing several files at once
+
+Pick as many files as you like and they become one share with one QR code. This
+is the case the app is really built around: handing someone a batch of photos
+from a phone without AirDrop, a cloud album, or a cable.
+
+Opening the link spends **one** access no matter how many files are inside.
+Charging per file would make a limit of "one view" meaningless the moment
+anybody shared twenty photos, so the ticket issued on opening covers every
+download that follows.
+
+The recipient gets a list, with individual downloads first and a zip second.
+That order is deliberate: on a phone a zip lands in Files and has to be
+unpacked before a photo can be saved, whereas tapping a single image lets the
+browser's own save-to-photos work. The zip is for "put all of this on my
+laptop".
+
+Archives are stored, never deflated — photos and video are already compressed,
+so deflating would burn CPU across the whole payload for nothing. It also means
+the archive size is known before the first byte is sent, so the download shows a
+real progress bar instead of an open-ended spinner.
+
+Previews are generated in the browser at upload time, from the image it has
+already decoded. That keeps a native image library out of the deployment
+entirely, and "the browser could decode it" is the right test for whether a
+preview is possible at all: an iPhone HEIC that Safari will not render is
+exactly the file a server-side thumbnailer would produce a preview nobody else
+can see. Anything without a preview shows a file icon.
+
+## Expiry
+
+A share can stop at a set time as well as after a number of opens. The two are
+independent, and whichever comes first wins — so "anyone can grab these, but
+only for the next hour" is unlimited opens plus a one-hour expiry.
+
+An expiry has no visit to trigger it, so a sweep runs every minute to retire
+shares that have passed theirs.
+
+When a share ends — limit reached or expired — the files are kept unless
+**Delete the content once the share ends** was set. A kept share can be
+reactivated from the library with a new limit, a new expiry, or both; it gets a
+fresh QR code and a zeroed counter, and the old code stays permanently dead.
 
 ## Administrator oversight
 

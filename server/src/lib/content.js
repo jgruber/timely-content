@@ -14,45 +14,89 @@ const tickets = new Map();
 const TICKET_TTL_MS = 5 * 60 * 1000;
 
 export function publicItem(item, url) {
+  const state = availability(item);
   return {
     id: item.id,
     title: item.title,
     kind: item.kind,
-    filename: item.filename,
+    files: (item.files || []).map((f) => ({
+      id: f.id, name: f.name, mime: f.mime, size: f.size, hasThumb: !!f.hasThumb,
+    })),
+    fileCount: (item.files || []).length,
     mime: item.mime,
     size: item.size,
     token: item.token,
     shareUrl: url,
     maxAccesses: item.maxAccesses,
     accessCount: item.accessCount,
-    deleteOnExhaust: !!item.deleteOnExhaust,
+    expiresAt: item.expiresAt || null,
+    deleteWhenFinished: !!item.deleteWhenFinished,
     remaining: item.maxAccesses === null ? null : Math.max(0, item.maxAccesses - item.accessCount),
-    exhausted: item.maxAccesses !== null && item.accessCount >= item.maxAccesses,
+    // One word for why a link no longer works, so the UI never has to
+    // re-derive the rule: 'live' | 'exhausted' | 'expired'.
+    state: state.state,
+    available: state.available,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     lastAccessAt: item.lastAccessAt || null,
   };
 }
 
-export function newItem({ owner, title, kind, filename, mime, size, maxAccesses, deleteOnExhaust }) {
+/**
+ * Whether a share link still works, and why not if it does not.
+ *
+ * Access count and expiry are independent gates: a link with unlimited uses
+ * still stops at its expiry time, and a link with uses left still stops once
+ * it expires. Whichever bites first wins.
+ */
+export function availability(item, now = Date.now()) {
+  if (item.pendingDelete) return { available: false, state: 'gone' };
+  if (item.expiresAt && Date.parse(item.expiresAt) <= now) {
+    return { available: false, state: 'expired' };
+  }
+  if (item.maxAccesses !== null && item.accessCount >= item.maxAccesses) {
+    return { available: false, state: 'exhausted' };
+  }
+  return { available: true, state: 'live' };
+}
+
+export function newItem({
+  owner, title, kind, files, mime, size, maxAccesses, expiresAt, deleteWhenFinished,
+}) {
   const now = new Date().toISOString();
   return {
     id: randomId(),
     owner,
     title,
     kind,
-    filename: filename || null,
+    files: files || [],
     mime: mime || null,
     size: size || 0,
     token: randomToken(),
     maxAccesses: maxAccesses ?? null,
     accessCount: 0,
-    deleteOnExhaust: !!deleteOnExhaust,
+    expiresAt: expiresAt || null,
+    deleteWhenFinished: !!deleteWhenFinished,
     createdAt: now,
     updatedAt: now,
     lastAccessAt: null,
     pendingDelete: false,
   };
+}
+
+/** Parse a client-supplied expiry. null means it never expires. */
+export function parseExpiresAt(value) {
+  if (value === null || value === undefined || value === '' || value === 'never') {
+    return { value: null };
+  }
+  const when = Date.parse(value);
+  if (Number.isNaN(when)) return { error: 'Expiry must be a date and time.' };
+  if (when <= Date.now()) return { error: 'Expiry must be in the future.' };
+  // Ten years is not a policy, just a guard against a fat-fingered year.
+  if (when > Date.now() + 10 * 365 * 24 * 3600 * 1000) {
+    return { error: 'Expiry is too far in the future.' };
+  }
+  return { value: new Date(when).toISOString() };
 }
 
 /** Parse a client-supplied access limit. null means unlimited. */
@@ -91,17 +135,16 @@ export function claimAccess(token) {
     const item = data.items.find((i) => i.token === token && !i.pendingDelete);
     if (!item) return { status: 'notfound' };
 
-    if (item.maxAccesses !== null && item.accessCount >= item.maxAccesses) {
-      return { status: 'exhausted' };
-    }
+    const state = availability(item);
+    if (!state.available) return { status: state.state };
 
     item.accessCount += 1;
     item.lastAccessAt = new Date().toISOString();
 
-    const nowExhausted = item.maxAccesses !== null && item.accessCount >= item.maxAccesses;
-    if (nowExhausted && item.deleteOnExhaust) {
-      item.pendingDelete = true;
-    }
+    // Re-evaluate now the count has moved: this access may have been the last
+    // one, or the clock may have crossed the expiry in between.
+    const finished = !availability(item).available;
+    if (finished && item.deleteWhenFinished) item.pendingDelete = true;
 
     const ticket = randomToken();
     tickets.set(ticket, {
@@ -161,12 +204,33 @@ export async function purge(id) {
   }
 
   try {
-    await fs.unlink(blobPath(id));
+    // A markdown note is a file here; a package is a directory. rm handles both.
+    await fs.rm(blobPath(id), { recursive: true, force: true });
   } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error(`[purge] could not remove blob for ${id}:`, err.message);
-    }
+    console.error(`[purge] could not remove stored data for ${id}:`, err.message);
   }
+}
+
+/**
+ * Remove shares that have passed their expiry and asked to be deleted.
+ *
+ * Access limits are enforced when someone opens a link, but an expiry has no
+ * such trigger -- a link nobody visits still has to stop existing on time.
+ */
+export async function sweepExpiredContent() {
+  const now = Date.now();
+  const due = await contentStore.read((data) => data.items
+    .filter((i) => i.deleteWhenFinished
+      && !i.pendingDelete
+      && i.expiresAt
+      && Date.parse(i.expiresAt) <= now)
+    .map((i) => ({ id: i.id, title: i.title })));
+
+  for (const item of due) {
+    await purge(item.id);
+    console.log(`[expiry] removed "${item.title}" (${item.id}) at its expiry`);
+  }
+  return due.length;
 }
 
 /** Drop expired tickets and reap any pendingDelete items they were holding. */
@@ -203,7 +267,8 @@ export async function reapOrphans() {
   for (const name of files) {
     if (known.has(name)) continue;
     try {
-      await fs.unlink(path.join(BLOB_DIR, name));
+      // Either a stray markdown blob or a stray package directory.
+      await fs.rm(path.join(BLOB_DIR, name), { recursive: true, force: true });
       console.log(`[init] removed orphaned blob ${name}`);
     } catch (err) {
       console.error(`[init] could not remove orphaned blob ${name}:`, err.message);

@@ -108,6 +108,17 @@ export const SCHEMA = [
     check: range(1, 2048),
   },
   {
+    key: 'maxPackageMb', env: 'MAX_PACKAGE_MB', parse: parsers.int, def: 500,
+    label: 'Maximum total size per upload (MB)',
+    help: 'Combined size of all files in one upload. Between 1 and 20480.',
+    check: range(1, 20480),
+  },
+  {
+    key: 'maxFilesPerPackage', env: 'MAX_FILES_PER_PACKAGE', parse: parsers.int, def: 100,
+    label: 'Maximum files per upload', help: 'Between 1 and 1000.',
+    check: range(1, 1000),
+  },
+  {
     key: 'sessionHours', env: 'SESSION_HOURS', parse: parsers.int, def: 12,
     label: 'Session length (hours)', help: 'Between 1 and 720.',
     check: range(1, 720),

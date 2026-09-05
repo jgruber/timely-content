@@ -157,28 +157,36 @@ export default function LibraryPage() {
 
 function ManageModal({ item, onClose, onSaved }) {
   const [limit, setLimit] = useState(null);
-  const [deleteOnExhaust, setDeleteOnExhaust] = useState(false);
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [deleteWhenFinished, setDeleteWhenFinished] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!item) return;
     setLimit(item.maxAccesses);
-    setDeleteOnExhaust(item.deleteOnExhaust);
+    setExpiresAt(item.expiresAt);
+    setDeleteWhenFinished(item.deleteWhenFinished);
     setError('');
   }, [item]);
 
   if (!item) return null;
+
+  const ended = item.state === 'expired' || item.state === 'exhausted';
 
   const save = async (rotate) => {
     if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
       setError('Enter a whole number of uses, or choose unlimited.');
       return;
     }
+    if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
+      setError('The expiry time has already passed.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      const payload = { maxAccesses: limit, deleteOnExhaust };
+      const payload = { maxAccesses: limit, expiresAt, deleteWhenFinished };
       const res = rotate
         ? await api.rotateToken(item.id, payload)
         : await api.updateContent(item.id, payload);
@@ -194,31 +202,51 @@ function ManageModal({ item, onClose, onSaved }) {
     <Modal
       open
       onClose={onClose}
-      title="Manage access"
+      title={ended ? 'Reactivate this share' : 'Manage access'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="secondary" onClick={() => save(true)} busy={busy}>
-            <Icon name="refresh" className="h-4 w-4" />
-            New QR code
-          </Button>
-          <Button onClick={() => save(false)} busy={busy}>Save</Button>
+          {ended ? (
+            <Button onClick={() => save(true)} busy={busy}>
+              <Icon name="refresh" className="h-4 w-4" />
+              New QR code
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={() => save(true)} busy={busy}>
+                <Icon name="refresh" className="h-4 w-4" />
+                New QR code
+              </Button>
+              <Button onClick={() => save(false)} busy={busy}>Save</Button>
+            </>
+          )}
         </>
       }
     >
       <div className="space-y-5">
-        <div className="rounded-lg border border-line bg-raised px-3.5 py-3 text-sm text-muted">
-          Used <span className="font-medium text-ink">{item.accessCount}</span>
-          {item.maxAccesses === null ? ' time(s) so far.' : ` of ${item.maxAccesses} time(s).`}
-          {' '}Issuing a new QR code invalidates the old one and resets the counter to zero.
-        </div>
+        {ended ? (
+          <Alert tone="accent">
+            This share has {item.state === 'expired' ? 'expired' : 'reached its limit'}, but the
+            content is still here. Set a new limit or expiry, then choose
+            <span className="font-medium"> New QR code</span> to bring it back — the old code
+            stays dead.
+          </Alert>
+        ) : (
+          <div className="rounded-lg border border-line bg-raised px-3.5 py-3 text-sm text-muted">
+            Used <span className="font-medium text-ink">{item.accessCount}</span>
+            {item.maxAccesses === null ? ' time(s) so far.' : ` of ${item.maxAccesses} time(s).`}
+            {' '}Issuing a new QR code invalidates the old one and resets the counter to zero.
+          </div>
+        )}
 
         <AccessControls
           idPrefix="manage"
           limit={limit}
           onLimitChange={setLimit}
-          deleteOnExhaust={deleteOnExhaust}
-          onDeleteChange={setDeleteOnExhaust}
+          expiresAt={expiresAt}
+          onExpiryChange={setExpiresAt}
+          deleteWhenFinished={deleteWhenFinished}
+          onDeleteChange={setDeleteWhenFinished}
         />
 
         <Alert>{error}</Alert>

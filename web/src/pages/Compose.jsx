@@ -14,7 +14,8 @@ export default function ComposePage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [limit, setLimit] = useState(1);
-  const [deleteOnExhaust, setDeleteOnExhaust] = useState(false);
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [deleteWhenFinished, setDeleteWhenFinished] = useState(false);
 
   const [ready, setReady] = useState(!editing);
   const [busy, setBusy] = useState(false);
@@ -30,7 +31,8 @@ export default function ComposePage() {
         setTitle(res.item.title);
         setBody(res.body || '');
         setLimit(res.item.maxAccesses);
-        setDeleteOnExhaust(res.item.deleteOnExhaust);
+        setExpiresAt(res.item.expiresAt);
+        setDeleteWhenFinished(res.item.deleteWhenFinished);
         setReady(true);
       })
       .catch((err) => {
@@ -45,11 +47,16 @@ export default function ComposePage() {
     if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
       return setError('Enter a whole number of uses, or choose unlimited.');
     }
+    if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
+      return setError('The expiry time has already passed.');
+    }
 
     setBusy(true);
     setError('');
     try {
-      const payload = { title: title.trim(), body, maxAccesses: limit, deleteOnExhaust };
+      const payload = {
+        title: title.trim(), body, maxAccesses: limit, expiresAt, deleteWhenFinished,
+      };
       if (editing) {
         await api.updateContent(id, payload);
         navigate('/');
@@ -104,8 +111,10 @@ export default function ComposePage() {
               idPrefix="compose"
               limit={limit}
               onLimitChange={setLimit}
-              deleteOnExhaust={deleteOnExhaust}
-              onDeleteChange={setDeleteOnExhaust}
+              expiresAt={expiresAt}
+              onExpiryChange={setExpiresAt}
+              deleteWhenFinished={deleteWhenFinished}
+              onDeleteChange={setDeleteWhenFinished}
             />
           </Card>
 

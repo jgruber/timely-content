@@ -11,8 +11,8 @@ import { resolve, missingRequired, startupHelp } from './lib/config.js';
 import { verifyTransport } from './lib/email.js';
 import { sweepExpired } from './lib/emailtokens.js';
 import { seedAdminFromEnv, countUsers } from './lib/users.js';
-import { sweepTickets, reapOrphans } from './lib/content.js';
-import { migrateToEmailIdentity, warnIfNoUsableAccount } from './lib/migrate.js';
+import { sweepTickets, reapOrphans, sweepExpiredContent } from './lib/content.js';
+import { migrateToEmailIdentity, migrateToPackages, warnIfNoUsableAccount } from './lib/migrate.js';
 import siteRoutes from './routes/site.js';
 import authRoutes from './routes/auth.js';
 import contentRoutes from './routes/content.js';
@@ -160,6 +160,7 @@ async function checkConfiguration() {
 async function start() {
   await checkConfiguration();
   await migrateToEmailIdentity();
+  await migrateToPackages();
 
   const seeded = await seedAdminFromEnv();
   if (seeded) console.log(`[init] seeded administrator "${seeded.email}" from the environment`);
@@ -180,6 +181,9 @@ async function start() {
 
   setInterval(sweepTickets, 60 * 1000).unref();
   setInterval(() => { void sweepExpired(); }, 10 * 60 * 1000).unref();
+  // An expiry has no visit to trigger it, so it needs its own sweep.
+  void sweepExpiredContent();
+  setInterval(() => { void sweepExpiredContent(); }, 60 * 1000).unref();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[timely-content] listening on port ${PORT}`);

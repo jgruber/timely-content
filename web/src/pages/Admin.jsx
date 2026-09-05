@@ -907,12 +907,16 @@ function ContentTab() {
                   <span className="truncate">{item.title}</span>
                   {item.maxAccesses === null ? (
                     <Badge tone="accent"><Icon name="infinity" className="h-3.5 w-3.5" />Unlimited</Badge>
-                  ) : item.exhausted ? (
+                  ) : item.state === 'exhausted' ? (
                     <Badge tone="danger">Limit reached</Badge>
                   ) : (
                     <Badge tone="neutral">{item.remaining} of {item.maxAccesses} left</Badge>
                   )}
-                  {item.deleteOnExhaust && item.maxAccesses !== null && (
+                  {item.state === 'expired' && <Badge tone="danger">Expired</Badge>}
+                  {item.expiresAt && item.state !== 'expired' && (
+                    <Badge tone="neutral">Until {formatDate(item.expiresAt)}</Badge>
+                  )}
+                  {item.deleteWhenFinished && (item.maxAccesses !== null || item.expiresAt) && (
                     <Badge tone="danger"><Icon name="trash" className="h-3.5 w-3.5" />Self-destructs</Badge>
                   )}
                 </p>
@@ -921,7 +925,9 @@ function ContentTab() {
                   {item.owner.email && <span className="text-muted"> &middot; {item.owner.email}</span>}
                 </p>
                 <p className="text-sm text-muted">
-                  {item.kind === 'markdown' ? 'Markdown' : (item.filename || 'File')}
+                  {item.kind === 'markdown'
+                    ? 'Markdown'
+                    : `${item.fileCount} file${item.fileCount === 1 ? '' : 's'}`}
                   {' '}&middot; {formatBytes(item.size)}
                   {' '}&middot; created {formatDate(item.createdAt)}
                   {' '}&middot; opened {relativeDate(item.lastAccessAt)}
@@ -997,7 +1003,7 @@ function InspectModal({ item, onClose }) {
           ) : (
             <div className="rounded-lg border border-line bg-panel px-4 py-6 text-center">
               <p className="text-sm text-muted">
-                {item.filename} &middot; {formatBytes(item.size)}
+                {item.fileCount} file{item.fileCount === 1 ? '' : 's'} &middot; {formatBytes(item.size)}
               </p>
               <a
                 href={adminDownloadUrl(item.id)}
@@ -1006,7 +1012,7 @@ function InspectModal({ item, onClose }) {
                   bg-panel px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-raised"
               >
                 <Icon name="download" className="h-4 w-4" />
-                Download a copy
+                {item.fileCount > 1 ? 'Download all as a zip' : 'Download a copy'}
               </a>
             </div>
           )

@@ -23,6 +23,7 @@
     "express-rate-limit": "^8.7.0",
     "multer": "^2.3.0",
     "nodemailer": "^10.0.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "yazl": "^3.3.1"
   }
 }

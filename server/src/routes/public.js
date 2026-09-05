@@ -1,9 +1,11 @@
-import { asyncRouter } from '../lib/router.js';
 import fs from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
 import rateLimit from 'express-rate-limit';
+import { asyncRouter } from '../lib/router.js';
 import { blobPath } from '../lib/paths.js';
-import { claimAccess, peekTicket, consumeTicket, purge, contentStore, KIND_MARKDOWN } from '../lib/content.js';
+import {
+  claimAccess, peekTicket, consumeTicket, purge, contentStore, KIND_MARKDOWN,
+} from '../lib/content.js';
+import { sendZip, sendFile, sendThumb } from './content.js';
 
 const router = asyncRouter();
 
@@ -17,47 +19,54 @@ const claimLimiter = rateLimit({
   message: { error: 'Too many requests. Please slow down.' },
 });
 
-const GONE = {
-  error: 'This link is no longer available.',
-  reason: 'unavailable',
+const GONE = { error: 'This link is no longer available.', reason: 'unavailable' };
+
+const REASONS = {
+  exhausted: { status: 410, error: 'This link has reached its access limit.', reason: 'exhausted' },
+  expired: { status: 410, error: 'This link has expired.', reason: 'expired' },
+  gone: { status: 404, ...GONE },
 };
 
 /**
  * Spend one QR access.
  *
- * Markdown comes back inline for rendering. Anything else returns a
- * short-lived ticket the browser redeems at /dl/:ticket. The access is spent
- * here, once; the ticket itself stays usable until it expires so an
- * interrupted download can be retried without spending another.
+ * One access covers the whole share, however many files are in it. Charging
+ * per file would make a limit of "one view" meaningless the moment somebody
+ * shared twenty photos. Markdown comes back inline; anything else returns a
+ * manifest plus a short-lived ticket, and every file fetch rides that same
+ * ticket without spending anything more.
  */
 router.get('/:token', claimLimiter, async (req, res, next) => {
   try {
     const result = await claimAccess(req.params.token);
     if (result.status === 'notfound') return res.status(404).json(GONE);
-    if (result.status === 'exhausted') {
-      return res.status(410).json({ error: 'This link has reached its access limit.', reason: 'exhausted' });
+    if (result.status !== 'ok') {
+      const reason = REASONS[result.status] || REASONS.gone;
+      return res.status(reason.status).json(reason);
     }
 
     const { item, ticket } = result;
     const payload = {
       title: item.title,
       kind: item.kind,
-      filename: item.filename,
       mime: item.mime,
       size: item.size,
       remaining: item.maxAccesses === null ? null : Math.max(0, item.maxAccesses - item.accessCount),
       unlimited: item.maxAccesses === null,
+      expiresAt: item.expiresAt || null,
       willVanish: !!item.pendingDelete,
     };
 
     if (item.kind === KIND_MARKDOWN) {
       payload.body = await fs.readFile(blobPath(item.id), 'utf8');
-      // Markdown is delivered in this response, so the ticket has no further
-      // use -- spend it now to trigger any pending deletion.
+      // Delivered in full here, so the ticket has no further use.
       const entry = consumeTicket(ticket);
       if (entry?.deleteAfter) await purge(entry.id);
     } else {
       payload.ticket = ticket;
+      payload.files = item.files.map((f) => ({
+        id: f.id, name: f.name, mime: f.mime, size: f.size, hasThumb: !!f.hasThumb,
+      }));
     }
 
     res.setHeader('Cache-Control', 'no-store');
@@ -67,33 +76,46 @@ router.get('/:token', claimLimiter, async (req, res, next) => {
   }
 });
 
+/**
+ * Resolve a ticket to its item.
+ *
+ * Peek rather than spend: a ticket stays usable for its short lifetime so a
+ * recipient can fetch several files, retry an interrupted download, and take
+ * the zip as well, all on the one access they already paid for.
+ */
+async function itemForTicket(ticket) {
+  const entry = peekTicket(ticket);
+  if (!entry) return null;
+  const item = await contentStore.read((data) => {
+    const found = data.items.find((i) => i.id === entry.id);
+    return found ? structuredClone(found) : null;
+  });
+  return item ? { entry, item } : null;
+}
+
+const EXPIRED_TICKET = {
+  error: 'This download link has expired. Scan the code again.',
+};
+
+/** The whole package as a zip. */
 router.get('/dl/:ticket', async (req, res, next) => {
-  try {
-    // Peek rather than spend: a ticket stays usable for its short lifetime so
-    // an interrupted or browser-blocked download can be retried.
-    const entry = peekTicket(req.params.ticket);
-    if (!entry) return res.status(410).json({ error: 'This download link has expired. Scan the code again.' });
+  const found = await itemForTicket(req.params.ticket);
+  if (!found) return res.status(410).json(EXPIRED_TICKET);
+  if (!found.item.files?.length) return res.status(404).json(GONE);
+  await sendZip(res, found.item, next);
+});
 
-    const item = await contentStore.read((data) => {
-      const found = data.items.find((i) => i.id === entry.id);
-      return found ? structuredClone(found) : null;
-    });
-    if (!item) return res.status(404).json(GONE);
+/** One file out of the package. */
+router.get('/dl/:ticket/:fileId', async (req, res, next) => {
+  const found = await itemForTicket(req.params.ticket);
+  if (!found) return res.status(410).json(EXPIRED_TICKET);
+  sendFile(res, found.item, req.params.fileId, next);
+});
 
-    res.setHeader('Content-Type', item.mime || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${encodeURIComponent(item.filename || item.title || 'download')}"`);
-
-    const stream = createReadStream(blobPath(item.id));
-    stream.on('error', next);
-    // A self-destructing item is reaped when its ticket expires rather than on
-    // first delivery, so a failed download can still be retried in the window.
-    // sweepTickets() handles that; nothing to do once the bytes are sent.
-    stream.pipe(res);
-  } catch (err) {
-    next(err);
-  }
+router.get('/dl/:ticket/:fileId/thumb', async (req, res, next) => {
+  const found = await itemForTicket(req.params.ticket);
+  if (!found) return res.status(410).json(EXPIRED_TICKET);
+  sendThumb(res, found.item, req.params.fileId, next);
 });
 
 export default router;

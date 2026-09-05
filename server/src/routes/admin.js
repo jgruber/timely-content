@@ -10,6 +10,7 @@ import { verifyTransport, sendMail, wrapEmail, escapeHtml } from '../lib/email.j
 import { sendVerificationEmail } from '../lib/notify.js';
 import { revokeFor, RESET } from '../lib/emailtokens.js';
 import { contentStore, purge, publicItem, anyItem, KIND_MARKDOWN } from '../lib/content.js';
+import { sendZip, sendFile } from './content.js';
 import { shareUrl } from '../lib/settings.js';
 import { blobPath } from '../lib/paths.js';
 import { createReadStream } from 'node:fs';
@@ -289,23 +290,23 @@ router.get('/content/:id', async (req, res) => {
   res.json(payload);
 });
 
-/** Download any stored file. Does not spend a QR access. */
+/** Download anything stored, whoever owns it. Does not spend a QR access. */
 router.get('/content/:id/download', async (req, res, next) => {
-  try {
-    const item = await contentStore.read((data) => {
-      const found = anyItem(data, req.params.id);
-      return found ? structuredClone(found) : null;
-    });
-    if (!item) return res.status(404).json({ error: 'Content not found.' });
+  const item = await contentStore.read((data) => {
+    const found = anyItem(data, req.params.id);
+    return found ? structuredClone(found) : null;
+  });
+  if (!item) return res.status(404).json({ error: 'Content not found.' });
 
-    res.setHeader('Content-Type', item.mime || 'application/octet-stream');
+  if (item.kind === KIND_MARKDOWN) {
+    res.setHeader('Content-Type', 'text/markdown');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Disposition',
-      `attachment; filename="${encodeURIComponent(item.filename || item.title || 'download')}"`);
-    createReadStream(blobPath(item.id)).on('error', next).pipe(res);
-  } catch (err) {
-    next(err);
+      `attachment; filename="${encodeURIComponent(`${item.title || 'note'}.md`)}"`);
+    return createReadStream(blobPath(item.id)).on('error', next).pipe(res);
   }
+  if (item.files?.length === 1) return sendFile(res, item, item.files[0].id, next);
+  return sendZip(res, item, next);
 });
 
 /** Take something down, whoever posted it. The share link dies immediately. */

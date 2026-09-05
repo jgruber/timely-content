@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { usersStore, normaliseEmail, EMAIL_RE, defaultDisplayName } from './users.js';
 import { contentStore } from './content.js';
+import { BLOB_DIR, blobPath } from './paths.js';
 
 /**
  * One-time upgrade from the username-based schema to the email-based one.
@@ -80,6 +83,71 @@ export async function migrateToEmailIdentity() {
   }
 
   return changes;
+}
+
+/**
+ * Upgrade single-file uploads to the package layout.
+ *
+ * A file used to be one blob at blobs/<itemId>. A package is a directory at
+ * that path holding one blob per member file, so an existing upload becomes a
+ * package of one. The blob is moved aside first, because a path cannot be a
+ * file and a directory at the same time.
+ *
+ * Also renames deleteOnExhaust, which now covers expiry as well as running out
+ * of accesses, and gives every item an explicit expiresAt.
+ */
+export async function migrateToPackages() {
+  const moves = [];
+
+  await contentStore.write((data) => {
+    for (const item of data.items) {
+      if (item.deleteOnExhaust !== undefined) {
+        item.deleteWhenFinished = !!item.deleteOnExhaust;
+        delete item.deleteOnExhaust;
+      }
+      if (item.expiresAt === undefined) item.expiresAt = null;
+
+      if (item.kind !== 'file' || Array.isArray(item.files)) continue;
+
+      const fileId = crypto.randomBytes(12).toString('hex');
+      item.files = [{
+        id: fileId,
+        name: item.filename || item.title || 'download',
+        mime: item.mime || 'application/octet-stream',
+        size: item.size || 0,
+        hasThumb: false,
+      }];
+      delete item.filename;
+      moves.push({ itemId: item.id, fileId });
+    }
+
+    // Markdown notes stay a bare blob and need no files array.
+    for (const item of data.items) {
+      if (item.kind === 'markdown' && !Array.isArray(item.files)) item.files = [];
+    }
+    data.version = 2;
+  });
+
+  let moved = 0;
+  for (const { itemId, fileId } of moves) {
+    const target = blobPath(itemId);
+    const staged = path.join(BLOB_DIR, `.migrating-${itemId}`);
+    try {
+      const stat = await fs.stat(target).catch(() => null);
+      // Already a directory means a previous run got this far; nothing to do.
+      if (!stat || stat.isDirectory()) continue;
+
+      await fs.rename(target, staged);
+      await fs.mkdir(target, { recursive: true });
+      await fs.rename(staged, path.join(target, fileId));
+      moved += 1;
+    } catch (err) {
+      console.error(`[migrate] could not repack ${itemId}: ${err.message}`);
+    }
+  }
+
+  if (moved) console.log(`[migrate] repacked ${moved} upload(s) into the package layout`);
+  return { moved };
 }
 
 /**

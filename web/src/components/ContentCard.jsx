@@ -1,16 +1,37 @@
 import { Link } from 'react-router-dom';
 import { Card, Badge, Button, Icon } from './ui.jsx';
-import { formatBytes, relativeDate } from '../lib/format.js';
+import { formatBytes, relativeDate, formatDate } from '../lib/format.js';
 import { ownerDownloadUrl } from '../lib/api.js';
 
-function UsageBadge({ item }) {
-  if (item.maxAccesses === null) {
-    return <Badge tone="accent"><Icon name="infinity" className="h-3.5 w-3.5" />Unlimited</Badge>;
+/** The access limit, and separately the expiry -- either can end a share. */
+function StateBadges({ item }) {
+  const badges = [];
+
+  if (item.state === 'expired') {
+    badges.push(<Badge key="s" tone="danger">Expired</Badge>);
+  } else if (item.state === 'exhausted') {
+    badges.push(<Badge key="s" tone="danger">Limit reached</Badge>);
+  } else if (item.maxAccesses === null) {
+    badges.push(
+      <Badge key="s" tone="accent"><Icon name="infinity" className="h-3.5 w-3.5" />Unlimited</Badge>,
+    );
+  } else {
+    badges.push(<Badge key="s" tone="neutral">{item.remaining} of {item.maxAccesses} left</Badge>);
   }
-  if (item.exhausted) {
-    return <Badge tone="danger">Limit reached</Badge>;
+
+  if (item.expiresAt && item.state !== 'expired') {
+    badges.push(
+      <Badge key="e" tone="neutral">Until {formatDate(item.expiresAt)}</Badge>,
+    );
   }
-  return <Badge tone="neutral">{item.remaining} of {item.maxAccesses} left</Badge>;
+
+  if (item.deleteWhenFinished && (item.maxAccesses !== null || item.expiresAt)) {
+    badges.push(
+      <Badge key="d" tone="danger"><Icon name="trash" className="h-3.5 w-3.5" />Deletes at the end</Badge>,
+    );
+  }
+
+  return badges;
 }
 
 export default function ContentCard({ item, onShare, onManage, onDelete }) {
@@ -25,24 +46,31 @@ export default function ContentCard({ item, onShare, onManage, onDelete }) {
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-medium text-ink" title={item.title}>{item.title}</h3>
           <p className="mt-0.5 truncate text-sm text-muted">
-            {isMarkdown ? 'Markdown' : (item.filename || 'File')} &middot; {formatBytes(item.size)}
+            {isMarkdown
+              ? 'Markdown'
+              : `${item.fileCount} file${item.fileCount === 1 ? '' : 's'}`}
+            {' '}&middot; {formatBytes(item.size)}
             {' '}&middot; opened {relativeDate(item.lastAccessAt)}
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <UsageBadge item={item} />
-        {item.deleteOnExhaust && item.maxAccesses !== null && (
-          <Badge tone="danger"><Icon name="trash" className="h-3.5 w-3.5" />Deletes at limit</Badge>
-        )}
+        <StateBadges item={item} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-        <Button variant="secondary" className="flex-1 px-3 sm:flex-none" onClick={() => onShare(item)}>
-          <Icon name="qr" className="h-4 w-4" />
-          Share
-        </Button>
+        {item.available ? (
+          <Button variant="secondary" className="flex-1 px-3 sm:flex-none" onClick={() => onShare(item)}>
+            <Icon name="qr" className="h-4 w-4" />
+            Share
+          </Button>
+        ) : (
+          <Button className="flex-1 px-3 sm:flex-none" onClick={() => onManage(item)}>
+            <Icon name="refresh" className="h-4 w-4" />
+            Reactivate
+          </Button>
+        )}
 
         {isMarkdown ? (
           <Link

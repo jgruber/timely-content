@@ -63,7 +63,7 @@ export const api = {
   listContent: () => request('/api/content'),
   getContent: (id) => request(`/api/content/${id}`),
   createMarkdown: (payload) => request('/api/content', { method: 'POST', body: payload }),
-  uploadFile: (form) => request('/api/content/upload', { method: 'POST', form }),
+  uploadFiles: (form, onProgress) => upload('/api/content/upload', form, onProgress),
   updateContent: (id, payload) => request(`/api/content/${id}`, { method: 'PUT', body: payload }),
   rotateToken: (id, payload) => request(`/api/content/${id}/rotate`, { method: 'POST', body: payload }),
   deleteContent: (id) => request(`/api/content/${id}`, { method: 'DELETE' }),
@@ -94,7 +94,40 @@ export const api = {
   sendTestEmail: (to) => request('/api/admin/settings/test-email', { method: 'POST', body: { to } }),
 };
 
+/**
+ * Uploads go through XHR rather than fetch: a package of photos can be
+ * hundreds of megabytes on a phone connection, and only XHR reports how much
+ * of the body has actually gone out.
+ */
+function upload(path, form, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    });
+
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else reject(new ApiError(payload?.error || `Upload failed (${xhr.status}).`, xhr.status, payload));
+    });
+    xhr.addEventListener('error', () => reject(new ApiError('The upload could not be completed.', 0)));
+    xhr.addEventListener('abort', () => reject(new ApiError('Upload cancelled.', 0)));
+
+    xhr.send(form);
+  });
+}
+
 export const qrImageUrl = (id, size = 512) => `/api/content/${id}/qr.png?size=${size}`;
+export const ownerZipUrl = (id) => `/api/content/${id}/zip`;
+export const ownerFileUrl = (id, fileId) => `/api/content/${id}/files/${fileId}`;
+export const ownerThumbUrl = (id, fileId) => `/api/content/${id}/files/${fileId}/thumb`;
+export const publicFileUrl = (ticket, fileId) => `/api/public/dl/${encodeURIComponent(ticket)}/${fileId}`;
+export const publicThumbUrl = (ticket, fileId) => `/api/public/dl/${encodeURIComponent(ticket)}/${fileId}/thumb`;
 export const ownerDownloadUrl = (id) => `/api/content/${id}/download`;
 /** Admin download of someone else's file. Does not spend a QR access. */
 export const adminDownloadUrl = (id) => `/api/admin/content/${id}/download`;

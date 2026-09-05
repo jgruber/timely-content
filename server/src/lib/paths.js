@@ -19,8 +19,30 @@ export function ensureDirs() {
   }
 }
 
-/** Blob path for a content id. Ids are validated hex, so this cannot escape BLOB_DIR. */
+const ID_RE = /^[0-9a-f]{24}$/;
+
+/**
+ * Storage path for a content item. Ids are validated hex, so this can never
+ * escape BLOB_DIR.
+ *
+ * A markdown note is a single file at this path. A file package is a
+ * directory at this path holding one blob per member file.
+ */
 export function blobPath(id) {
-  if (!/^[0-9a-f]{24}$/.test(id)) throw new Error('invalid content id');
+  if (!ID_RE.test(id)) throw new Error('invalid content id');
   return path.join(BLOB_DIR, id);
+}
+
+/** Path to one member file inside a package. */
+export function filePath(itemId, fileId) {
+  if (!ID_RE.test(itemId)) throw new Error('invalid content id');
+  if (!ID_RE.test(fileId)) throw new Error('invalid file id');
+  return path.join(BLOB_DIR, itemId, fileId);
+}
+
+/** Path to a member file's thumbnail, if one was supplied. */
+export function thumbPath(itemId, fileId) {
+  if (!ID_RE.test(itemId)) throw new Error('invalid content id');
+  if (!ID_RE.test(fileId)) throw new Error('invalid file id');
+  return path.join(BLOB_DIR, itemId, `${fileId}.thumb`);
 }
