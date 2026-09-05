@@ -81,3 +81,45 @@ export async function migrateToEmailIdentity() {
 
   return changes;
 }
+
+/**
+ * Guard against the one upgrade path that can brick an instance.
+ *
+ * If no account has an email address, nobody can sign in -- and first-run
+ * setup will not re-open, because accounts do exist. Rather than leave someone
+ * staring at a sign-in form that can never succeed, say exactly what happened
+ * and exactly how to fix it.
+ */
+export async function warnIfNoUsableAccount() {
+  const { total, usable } = await usersStore.read((data) => ({
+    total: data.users.length,
+    usable: data.users.filter((u) => u.email && u.emailVerified).length,
+  }));
+
+  if (total === 0 || usable > 0) return false;
+
+  const line = '='.repeat(72);
+  console.error(line);
+  console.error(' No account can sign in: none of them has an email address.');
+  console.error(line);
+  console.error('');
+  console.error('  Sign-in is by email address. These accounts were migrated from the');
+  console.error('  old username-based schema, where the username was not an address.');
+  console.error('');
+  console.error('  To fix, edit credentials.json in the data volume and give the');
+  console.error('  administrator an "email" field, for example:');
+  console.error('');
+  console.error('    {');
+  console.error('      "id": "...",');
+  console.error('      "email": "you@example.com",     <-- add this');
+  console.error('      "emailVerified": true,          <-- and this');
+  console.error('      "displayName": "...",');
+  console.error('      ...');
+  console.error('    }');
+  console.error('');
+  console.error('  Then restart the container and sign in with that address and your');
+  console.error('  existing password. Content ownership is keyed on "id", so it is');
+  console.error('  unaffected.');
+  console.error(line);
+  return true;
+}

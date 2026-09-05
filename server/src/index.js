@@ -12,7 +12,7 @@ import { verifyTransport } from './lib/email.js';
 import { sweepExpired } from './lib/emailtokens.js';
 import { seedAdminFromEnv, countUsers } from './lib/users.js';
 import { sweepTickets, reapOrphans } from './lib/content.js';
-import { migrateToEmailIdentity } from './lib/migrate.js';
+import { migrateToEmailIdentity, warnIfNoUsableAccount } from './lib/migrate.js';
 import siteRoutes from './routes/site.js';
 import authRoutes from './routes/auth.js';
 import contentRoutes from './routes/content.js';
@@ -163,6 +163,8 @@ async function start() {
 
   const seeded = await seedAdminFromEnv();
   if (seeded) console.log(`[init] seeded administrator "${seeded.email}" from the environment`);
+
+  await warnIfNoUsableAccount();
 
   if ((await countUsers()) === 0) {
     console.log('[init] ============================================================');
