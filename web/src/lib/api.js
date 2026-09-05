@@ -83,6 +83,11 @@ export const api = {
   markUserVerified: (id) =>
     request(`/api/admin/users/${encodeURIComponent(id)}/verify`, { method: 'POST' }),
 
+  listAllContent: () => request('/api/admin/content'),
+  getAnyContent: (id) => request(`/api/admin/content/${encodeURIComponent(id)}`),
+  deleteAnyContent: (id) =>
+    request(`/api/admin/content/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   getSettings: () => request('/api/admin/settings'),
   saveSettings: (payload) => request('/api/admin/settings', { method: 'PUT', body: payload }),
   sendTestEmail: (to) => request('/api/admin/settings/test-email', { method: 'POST', body: { to } }),
@@ -90,4 +95,6 @@ export const api = {
 
 export const qrImageUrl = (id, size = 512) => `/api/content/${id}/qr.png?size=${size}`;
 export const ownerDownloadUrl = (id) => `/api/content/${id}/download`;
+/** Admin download of someone else's file. Does not spend a QR access. */
+export const adminDownloadUrl = (id) => `/api/admin/content/${id}/download`;
 export const publicDownloadUrl = (ticket) => `/api/public/dl/${encodeURIComponent(ticket)}`;

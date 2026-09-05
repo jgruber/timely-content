@@ -4,7 +4,9 @@ import { useAuth } from '../lib/auth.jsx';
 import {
   Button, Card, Input, NumberInput, Field, Alert, Icon, Spinner, Modal, Toggle, Badge, cx,
 } from '../components/ui.jsx';
-import { relativeDate } from '../lib/format.js';
+import { relativeDate, formatBytes, formatDate } from '../lib/format.js';
+import { adminDownloadUrl } from '../lib/api.js';
+import { renderMarkdown } from '../lib/markdown.js';
 import ThemePicker from '../components/ThemePicker.jsx';
 
 export default function AdminPage() {
@@ -17,6 +19,7 @@ export default function AdminPage() {
       <div className="flex gap-1 rounded-lg border border-line bg-panel p-1">
         {[
           { id: 'users', label: 'Users', icon: 'users' },
+          { id: 'content', label: 'Content', icon: 'library' },
           { id: 'settings', label: 'System', icon: 'settings' },
         ].map((t) => (
           <button
@@ -33,7 +36,9 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'users' ? <UsersTab /> : <SettingsTab />}
+      {tab === 'users' && <UsersTab />}
+      {tab === 'content' && <ContentTab />}
+      {tab === 'settings' && <SettingsTab />}
     </div>
   );
 }
@@ -802,5 +807,267 @@ function SettingsTab() {
         <Button type="submit" busy={busy}>Save settings</Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Everything stored on the instance, whoever owns it.
+ *
+ * This is the only screen that reads across accounts. It exists so an
+ * administrator can answer "what is being shared from my server" and take
+ * something down, so it deliberately shows the owner alongside every item.
+ */
+function ContentTab() {
+  const [items, setItems] = useState([]);
+  const [publicUrlConfigured, setPublicUrlConfigured] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [query, setQuery] = useState('');
+  const [viewing, setViewing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.listAllContent();
+      setItems(res.items);
+      setPublicUrlConfigured(res.publicUrlConfigured);
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? items.filter((i) =>
+      i.title.toLowerCase().includes(needle)
+      || (i.filename || '').toLowerCase().includes(needle)
+      || (i.owner.email || '').toLowerCase().includes(needle)
+      || (i.owner.displayName || '').toLowerCase().includes(needle))
+    : items;
+
+  const totalBytes = items.reduce((sum, i) => sum + (i.size || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {items.length} item{items.length === 1 ? '' : 's'} across all accounts
+          {items.length > 0 && ` · ${formatBytes(totalBytes)}`}
+        </p>
+      </div>
+
+      <Alert>{error}</Alert>
+      {notice && <Alert tone="accent">{notice}</Alert>}
+      {!publicUrlConfigured && (
+        <Alert tone="info">
+          No public URL is configured, so share links below use the address you are
+          browsing from.
+        </Alert>
+      )}
+
+      {items.length > 4 && (
+        <Input
+          type="search"
+          placeholder="Search by title, filename or owner"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search all content"
+        />
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-14 text-muted"><Spinner className="h-6 w-6" /></div>
+      ) : visible.length === 0 ? (
+        <Card className="px-6 py-12 text-center">
+          <p className="font-medium text-ink">
+            {items.length === 0 ? 'Nothing is shared yet' : 'No matches'}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {items.length === 0
+              ? 'Content posted by any account will appear here.'
+              : 'Try a different search term.'}
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {visible.map((item) => (
+            <Card key={item.id} className="flex flex-wrap items-start gap-3 p-4">
+              <div className="mt-0.5 shrink-0 rounded-lg bg-accent-soft p-2 text-accent">
+                <Icon name={item.kind === 'markdown' ? 'doc' : 'file'} className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
+                  <span className="truncate">{item.title}</span>
+                  {item.maxAccesses === null ? (
+                    <Badge tone="accent"><Icon name="infinity" className="h-3.5 w-3.5" />Unlimited</Badge>
+                  ) : item.exhausted ? (
+                    <Badge tone="danger">Limit reached</Badge>
+                  ) : (
+                    <Badge tone="neutral">{item.remaining} of {item.maxAccesses} left</Badge>
+                  )}
+                  {item.deleteOnExhaust && item.maxAccesses !== null && (
+                    <Badge tone="danger"><Icon name="trash" className="h-3.5 w-3.5" />Self-destructs</Badge>
+                  )}
+                </p>
+                <p className="truncate text-sm text-muted">
+                  {item.owner.displayName}
+                  {item.owner.email && <span className="text-muted"> &middot; {item.owner.email}</span>}
+                </p>
+                <p className="text-sm text-muted">
+                  {item.kind === 'markdown' ? 'Markdown' : (item.filename || 'File')}
+                  {' '}&middot; {formatBytes(item.size)}
+                  {' '}&middot; created {formatDate(item.createdAt)}
+                  {' '}&middot; opened {relativeDate(item.lastAccessAt)}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1">
+                <Button variant="ghost" className="px-3" onClick={() => setViewing(item)} title="Inspect">
+                  <Icon name="eye" className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="px-3 text-danger hover:bg-danger-soft hover:text-danger"
+                  onClick={() => setDeleting(item)}
+                  title="Remove this content"
+                >
+                  <Icon name="trash" className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <InspectModal item={viewing} onClose={() => setViewing(null)} />
+      <RemoveContentModal
+        item={deleting}
+        onClose={() => setDeleting(null)}
+        onRemoved={(id, title) => {
+          setItems((prev) => prev.filter((i) => i.id !== id));
+          setDeleting(null);
+          setNotice(`Removed "${title}". Its share link no longer works.`);
+        }}
+      />
+    </div>
+  );
+}
+
+function InspectModal({ item, onClose }) {
+  const [state, setState] = useState({ status: 'idle' });
+
+  useEffect(() => {
+    if (!item) return undefined;
+    let cancelled = false;
+    setState({ status: 'loading' });
+    api.getAnyContent(item.id)
+      .then((res) => { if (!cancelled) setState({ status: 'ok', ...res }); })
+      .catch((err) => { if (!cancelled) setState({ status: 'error', message: err.message }); });
+    return () => { cancelled = true; };
+  }, [item]);
+
+  if (!item) return null;
+
+  return (
+    <Modal open onClose={onClose} title={item.title} wide>
+      <div className="space-y-4">
+        <div className="rounded-lg border border-line bg-raised px-3.5 py-3 text-sm text-muted">
+          Posted by <span className="font-medium text-ink">{item.owner.displayName}</span>
+          {item.owner.email && ` (${item.owner.email})`}.
+          {' '}Viewing here does not spend one of the QR code&apos;s accesses.
+        </div>
+
+        {state.status === 'loading' && (
+          <div className="flex justify-center py-8 text-muted"><Spinner className="h-6 w-6" /></div>
+        )}
+        {state.status === 'error' && <Alert>{state.message}</Alert>}
+
+        {state.status === 'ok' && (
+          state.body !== undefined ? (
+            <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-line bg-panel px-4 py-3">
+              <div className="md-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(state.body) }} />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-line bg-panel px-4 py-6 text-center">
+              <p className="text-sm text-muted">
+                {item.filename} &middot; {formatBytes(item.size)}
+              </p>
+              <a
+                href={adminDownloadUrl(item.id)}
+                download
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-line
+                  bg-panel px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-raised"
+              >
+                <Icon name="download" className="h-4 w-4" />
+                Download a copy
+              </a>
+            </div>
+          )
+        )}
+
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-ink">Share link</p>
+          <input
+            type="url"
+            readOnly
+            value={item.shareUrl}
+            onFocus={(e) => e.target.select()}
+            className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 font-mono text-xs text-muted"
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RemoveContentModal({ item, onClose, onRemoved }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!item) return null;
+
+  const confirm = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await api.deleteAnyContent(item.id);
+      onRemoved(item.id, item.title);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Remove content"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="danger" onClick={confirm} busy={busy}>Remove permanently</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-ink">
+          Remove <span className="font-medium">{item.title}</span>, posted by{' '}
+          <span className="font-medium">{item.owner.displayName}</span>?
+        </p>
+        <p className="text-sm text-muted">
+          The stored file is deleted from the server and its QR code stops working
+          immediately. The owner is not notified. This cannot be undone.
+        </p>
+        <Alert>{error}</Alert>
+      </div>
+    </Modal>
   );
 }

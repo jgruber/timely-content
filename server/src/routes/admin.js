@@ -9,7 +9,11 @@ import { getSettings, getSettingsDetail, saveSettings } from '../lib/settings.js
 import { verifyTransport, sendMail, wrapEmail, escapeHtml } from '../lib/email.js';
 import { sendVerificationEmail } from '../lib/notify.js';
 import { revokeFor, RESET } from '../lib/emailtokens.js';
-import { contentStore, purge } from '../lib/content.js';
+import { contentStore, purge, publicItem, anyItem, KIND_MARKDOWN } from '../lib/content.js';
+import { shareUrl } from '../lib/settings.js';
+import { blobPath } from '../lib/paths.js';
+import { createReadStream } from 'node:fs';
+import fs from 'node:fs/promises';
 import { SCHEMA } from '../lib/config.js';
 
 const router = asyncRouter();
@@ -233,6 +237,88 @@ router.delete('/users/:id', async (req, res) => {
   for (const id of owned) await purge(id);
 
   res.json({ ok: true, removedContent: owned.length });
+});
+
+// ---- Content oversight -----------------------------------------------------
+
+/**
+ * Everything stored on the instance, whoever owns it.
+ *
+ * Administrators need this to answer "what is being shared from my server"
+ * and to take something down. Owner-facing routes stay scoped to the signed-in
+ * account; this is the only place that reads across accounts.
+ */
+router.get('/content', async (req, res) => {
+  const settings = await getSettings();
+  const owners = await usersStore.read((data) => {
+    const map = {};
+    for (const u of data.users) {
+      map[u.id] = { id: u.id, email: u.email, displayName: u.displayName };
+    }
+    return map;
+  });
+
+  const items = await contentStore.read((data) =>
+    data.items.filter((i) => !i.pendingDelete).map((i) => structuredClone(i)));
+  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  res.json({
+    items: items.map((i) => ({
+      ...publicItem(i, shareUrl(settings, i.token, req)),
+      // A deleted account's content is purged with it, but a stale row would
+      // otherwise render as blank -- name it so it can still be cleaned up.
+      owner: owners[i.owner] || { id: i.owner, email: '', displayName: 'unknown account' },
+    })),
+    publicUrlConfigured: !!settings.publicUrl,
+  });
+});
+
+/** Inspect one item. Markdown comes back inline; no QR access is consumed. */
+router.get('/content/:id', async (req, res) => {
+  const item = await contentStore.read((data) => {
+    const found = anyItem(data, req.params.id);
+    return found ? structuredClone(found) : null;
+  });
+  if (!item) return res.status(404).json({ error: 'Content not found.' });
+
+  const settings = await getSettings();
+  const payload = { item: publicItem(item, shareUrl(settings, item.token, req)) };
+  if (item.kind === KIND_MARKDOWN) {
+    payload.body = await fs.readFile(blobPath(item.id), 'utf8');
+  }
+  res.json(payload);
+});
+
+/** Download any stored file. Does not spend a QR access. */
+router.get('/content/:id/download', async (req, res, next) => {
+  try {
+    const item = await contentStore.read((data) => {
+      const found = anyItem(data, req.params.id);
+      return found ? structuredClone(found) : null;
+    });
+    if (!item) return res.status(404).json({ error: 'Content not found.' });
+
+    res.setHeader('Content-Type', item.mime || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${encodeURIComponent(item.filename || item.title || 'download')}"`);
+    createReadStream(blobPath(item.id)).on('error', next).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Take something down, whoever posted it. The share link dies immediately. */
+router.delete('/content/:id', async (req, res) => {
+  const item = await contentStore.read((data) => {
+    const found = anyItem(data, req.params.id);
+    return found ? structuredClone(found) : null;
+  });
+  if (!item) return res.status(404).json({ error: 'Content not found.' });
+
+  await purge(item.id);
+  console.log(`[admin] ${req.user.email} removed content "${item.title}" (${item.id})`);
+  res.json({ ok: true });
 });
 
 // ---- System settings -------------------------------------------------------

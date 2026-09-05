@@ -68,6 +68,7 @@ The first start after upgrading migrates `credentials.json` automatically:
 | --- | --- |
 | First run | Setup screen creates the first administrator; no default password |
 | Install | Installable as a PWA from the browser, or "Install app" in the profile menu |
+| Oversight | Administrators see and can remove content posted by any account |
 | Authoring | WYSIWYG markdown editor, or upload any file |
 | Sharing | Each item gets a QR code and a link at `/c/<token>` |
 | Access limit | A fixed number of opens, or unlimited |
@@ -88,6 +89,23 @@ Markdown comes back in that response. Other files receive a single-use ticket
 which the browser immediately redeems, so the bytes are delivered exactly once
 per access spent — and a self-destructing item is reaped only after its bytes
 have actually left.
+
+## Administrator oversight
+
+**Administration -> Content** lists everything stored on the instance, whoever
+posted it, with the owner shown against each item. An administrator can inspect
+any item — markdown renders inline, files download — and remove anything, which
+deletes the stored bytes and kills the share link immediately.
+
+Two deliberate properties:
+
+- Inspecting from this screen does **not** spend one of the QR code's accesses,
+  so checking what is being shared never uses up a recipient's view.
+- Every removal is written to the log with who did it and what was removed.
+
+This is the only place that reads across accounts. Every owner-facing route
+stays scoped to the signed-in account, and a non-administrator gets `403` from
+all of it.
 
 ## Configuration
 

@@ -65,8 +65,16 @@ export function parseMaxAccesses(value) {
   return { value: n };
 }
 
-export function ownedBy(data, id, username) {
-  return data.items.find((i) => i.id === id && i.owner === username && !i.pendingDelete) || null;
+export function ownedBy(data, id, ownerId) {
+  return data.items.find((i) => i.id === id && i.owner === ownerId && !i.pendingDelete) || null;
+}
+
+/**
+ * Find an item regardless of who owns it. Only for administrator routes --
+ * every owner-facing path must keep going through ownedBy().
+ */
+export function anyItem(data, id) {
+  return data.items.find((i) => i.id === id && !i.pendingDelete) || null;
 }
 
 /**
