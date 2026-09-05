@@ -13,10 +13,19 @@ import { formatBytes } from '../lib/format.js';
  * Picking twenty photos on a phone and handing them over with one QR code is
  * the point, so the whole selection becomes one share with one access count,
  * not twenty separate ones.
+ *
+ * There are two file inputs on purpose. Android builds its chooser from the
+ * accept attribute: leaving it off makes the intent type "everything", and the
+ * gallery apps never appear because they only register for image and video
+ * types -- the user is left with Files and a camera that can only take a fresh
+ * photo. Naming image and video explicitly is the only way to reach the
+ * gallery, so one input does that and a second, unrestricted one keeps
+ * documents and unusual formats reachable.
  */
 export default function UploadPage() {
   const navigate = useNavigate();
-  const inputRef = useRef(null);
+  const filesInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
 
   const [picked, setPicked] = useState([]);
   const [title, setTitle] = useState('');
@@ -120,13 +129,9 @@ export default function UploadPage() {
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); add(e.dataTransfer.files); }}
-          onClick={() => inputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
           className={cx(
-            'flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors',
-            dragging ? 'border-accent bg-accent-soft' : 'border-line hover:border-accent hover:bg-raised',
+            'flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors',
+            dragging ? 'border-accent bg-accent-soft' : 'border-line',
           )}
         >
           <span className="grid h-12 w-12 place-items-center rounded-xl bg-accent-soft text-accent">
@@ -134,14 +139,47 @@ export default function UploadPage() {
           </span>
           <div>
             <p className="font-medium text-ink">
-              {picked.length ? 'Add more files' : 'Choose files'}
+              {picked.length ? 'Add more' : 'Choose what to share'}
             </p>
             <p className="mt-0.5 text-sm text-muted">
               Pick as many as you like — they share one QR code
             </p>
           </div>
+
+          {/* See the note above the component for why there are two of these. */}
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => mediaInputRef.current?.click()}
+              className="sm:px-5"
+            >
+              <Icon name="eye" className="h-4 w-4" />
+              Photos and videos
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => filesInputRef.current?.click()}
+              className="sm:px-5"
+            >
+              <Icon name="file" className="h-4 w-4" />
+              Documents and other files
+            </Button>
+          </div>
+
+          <p className="hidden text-xs text-muted sm:block">or drop them here</p>
+
           <input
-            ref={inputRef}
+            ref={mediaInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={(e) => { add(e.target.files); e.target.value = ''; }}
+          />
+          <input
+            ref={filesInputRef}
             type="file"
             multiple
             className="hidden"

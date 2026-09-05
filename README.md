@@ -120,6 +120,14 @@ Any file type is accepted — documents, spreadsheets, PDFs, archives and
 proprietary binary formats are all stored and returned byte for byte, with
 their original names intact including spaces and accents.
 
+The picker is deliberately split into **Photos and videos** and **Documents and
+other files**. Android builds its file chooser from the `accept` attribute, and
+an input that accepts everything gets an intent type the gallery apps do not
+register for — so Google Photos and Gallery are simply absent from the chooser,
+leaving Files and a camera that can only take a fresh photo. Naming image and
+video types explicitly is the only way to reach the gallery, and the second,
+unrestricted input keeps documents and unusual formats reachable.
+
 Previews are generated in the browser at upload time, from the image it has
 already decoded. That keeps a native image library out of the deployment
 entirely, and "the browser could decode it" is the right test for whether a
